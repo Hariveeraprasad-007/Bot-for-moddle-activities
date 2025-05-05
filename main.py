@@ -1,106 +1,133 @@
+import os
+import time
+import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
-from transformers import pipeline
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-# Initialize the Hugging Face question-answering model (using a better model like RoBERTa)
-generator = pipeline("question-answering", model="roberta-base")
+load_dotenv()
+API_KEY = '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'
 
-# Setup Firefox WebDriver
+import re
+
+def ask_gpt(question, options):
+    context = "\n".join([f"{chr(97+i)}. {opt}" for i, opt in enumerate(options)])
+    prompt = f"""You are a helpful assistant answering multiple-choice questions.
+
+Q: {question}
+Options:
+{context}
+
+Choose the correct option (a, b, c, or d) and explain your reasoning."""
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "HTTP-Referer": "https://yourdomain.com",  # Optional
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "openai/gpt-3.5-turbo",  # Or use mistralai/mixtral-8x7b or anthropic/claude-2
+        "messages": [{"role": "user", "content": prompt}]
+    }
+
+    try:
+        res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=30)
+        res.raise_for_status()
+        content = res.json()["choices"][0]["message"]["content"]
+        
+        # Use a regular expression to extract the option letter (a, b, c, or d) from the response
+        match = re.search(r'\b([abcd])\b', content.strip().lower())  # Looks for a single letter a, b, c, or d
+        if match:
+            answer = match.group(1)
+            print("Model Response:", content)
+            return answer
+        else:
+            print("Could not extract answer from response:", content)
+            return ""
+    except Exception as e:
+        print("API error:", e)
+        return ""
+
+# Initialize WebDriver
 driver = webdriver.Firefox()
+wait = WebDriverWait(driver, 20)
 
 # Login
-driver.get("https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1394")  # Use your quiz URL
-WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys("23009466")
+driver.get("https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1394")
+wait.until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys("23009466")
 driver.find_element(By.NAME, 'password').send_keys("g26736")
 driver.find_element(By.ID, 'loginbtn').click()
 time.sleep(2)
 
-# Wait for the quiz button (either Start, Re-attempt, or Continue last attempt)
-quiz_button = WebDriverWait(driver, 30).until(
+# Handle start/restart/continue
+quiz_button = wait.until(
     EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')]"))
 )
+quiz_button.click()
+time.sleep(2)
+try:
+    driver.find_element(By.ID, 'id_submitbutton').click()
+except:
+    pass
 
-button_text = quiz_button.text.strip()
-if button_text == "Continue your attempt":
-    # If the button is "Continue last attempt", click it directly
-    quiz_button.click()
-    print("Clicked 'Continue last attempt' to continue the quiz.")
-elif button_text.lower() in ['start attempt', 're-attempt quiz']:
-    # If it's "Start attempt" or "Re-attempt", click the button
-    quiz_button.click()
-    driver.find_element(By.ID,'id_submitbutton').click()
-    print(f"Clicked '{button_text}' to start the quiz.")
-    
-    # Now, after clicking "Start attempt" or "Re-attempt", we need to wait for the page to load and click the "Start attempt" button again
-
-wait = WebDriverWait(driver, 10)
-
-# Proceed with questions as usual
-for i in range(10):  # Assuming 10 questions
-    time.sleep(2)
-
+# Loop over questions
+# Loop over questions
+# Loop over questions
+for i in range(10):
     try:
-        wait = WebDriverWait(driver, 10)
+        time.sleep(2)
         question_text = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext"))).text
 
-        # Get the 4 answer options and radio buttons
-        option_elements = driver.find_elements(By.CSS_SELECTOR, ".answer div")[:4]  # Only the first 4 options
-        radio_buttons = driver.find_elements(By.CSS_SELECTOR, ".answer input[type='radio']")[:4]  # Only the first 4 radio buttons
+        answer_html = driver.find_element(By.CLASS_NAME, "answer").get_attribute('outerHTML')
+        soup = BeautifulSoup(answer_html, 'html.parser')
 
-        options = [opt.text.strip() for opt in option_elements if opt.text.strip()]  # Remove any empty text elements
+        option_texts = []
+        radio_elements = []
 
-        # If there are less than 4 options, print a message
-        if len(options) < 4:
-            print(f"Warning: Less than 4 options found for question {i+1}.")
+        all_inputs = soup.find_all('input', {'type': 'radio'})
+        for inp in all_inputs:
+            label_id = inp.get('aria-labelledby') or inp.get('aria-label') or ''
+            label_div = soup.find(id=label_id)
+            if label_div:
+                option_texts.append(label_div.get_text(strip=True))
+                try:
+                    selenium_radio = driver.find_element(By.ID, inp.get('id'))
+                    radio_elements.append(selenium_radio)
+                except:
+                    continue
+        # Send question + options to GPT
+        model_answer = ask_gpt(question_text, option_texts)
 
-        # Ensure there are no duplicate options
-        options = list(set(options))
-
-        # Handle the case when there are still less than 4 options after removing duplicates
-        while len(options) < 4:
-            options.append("Empty Option")  # Adding filler options to make the list length 4
-
-        context = " ".join(options)  # Use all options as context for the model
-
-        # Use Hugging Face to find the best answer
-        result = generator(question=question_text, context=context)
-        model_answer = result['answer'].strip().lower()
-
-        print(f"\nQ{i+1}: {question_text}")
-        print("Options:", options)
-        print("Model Answer:", model_answer)
-
-        # Match model answer to one of the options
+        # Match based on label
         clicked = False
-        for j, opt in enumerate(options):
-            if model_answer in opt.lower():  # Case-insensitive matching
-                radio_buttons[j].click()
-                print(f"Clicked option: {options[j]}")
+        for j, text in enumerate(option_texts):
+            if model_answer == chr(97+j):  # Compare with 'a', 'b', etc.
+                radio_elements[j].click()
+                print("Clicked:", text)
                 clicked = True
                 break
-
         if not clicked:
-            print("Model answer not matched with any option.")
+            print("Could not match model answer to any option.")
 
-        # Click next or finish
         if i == 9:
-            finish_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//input[@value='Finish attempt ...'] | //button[contains(text(), 'Finish attempt ...')]"))
+            finish = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//input[@value='Finish attempt ...'] | //button[contains(text(), 'Finish attempt')]"))
             )
-            finish_button.click()
-            print("Clicked 'Finish attempt'.")
+            finish.click()
         else:
-            next_button = WebDriverWait(driver, 10).until(
+            next_btn = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, "//input[@value='Next page'] | //button[contains(text(), 'Next page')]"))
             )
-            next_button.click()
-            print("Clicked 'Next page'.")
+            next_btn.click()
 
     except Exception as e:
-        print(f"Error on question {i+1}: {e}")
+        print(f"Error on Q{i+1}: {e}")
         break
+
+
 
 driver.quit()
