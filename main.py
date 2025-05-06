@@ -13,7 +13,7 @@ import re
 
 # !! WARNING: Hardcoding API keys is insecure. Use environment variables (.env) instead. !!
 # Replace 'sk-YOUR_HARDCODED_API_KEY_HERE' with your actual OpenRouter API key.
-API_KEY = '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'
+API_KEY = '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'
 
 def ask_gpt(question, options):
     context = "\n".join([f"{chr(97+i)}. {opt}" for i, opt in enumerate(options)])
@@ -23,17 +23,17 @@ Q: {question}
 Options:
 {context}
 
-Choose the correct option (a, b, c, or d) and explain your reasoning. Just provide the letter first, then the explanation."""
+Choose the correct option (a, b, c, or d) and explain your reasoning. Just provide the letter first."""
 
     headers = {
         "Authorization": f"Bearer {API_KEY}",
-        "HTTP-Referer": "https://yourdomain.com",  # Optional - replace with your domain
+        "HTTP-Referer": "",  # Optional - replace with your domain
         "Content-Type": "application/json"
     }
 
     data = {
         # Changed the model to DeepSeek Chat on OpenRouter
-        "model": "meta-llama/llama-4-maverick:free", # Or another DeepSeek model supported by OpenRouter like 'deepseek/coder' if applicable
+        "model": "shisa-ai/shisa-v2-llama3.3-70b:free", # Or another DeepSeek model supported by OpenRouter like 'deepseek/coder' if applicable
         "messages": [{"role": "user", "content": prompt}]
     }
 
@@ -71,7 +71,7 @@ driver = webdriver.Firefox()
 wait = WebDriverWait(driver, 20)
 
 # Login
-driver.get("https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1394")
+driver.get("https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1502")
 try:
     wait.until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys("23009466")
     driver.find_element(By.NAME, 'password').send_keys("g26736")
