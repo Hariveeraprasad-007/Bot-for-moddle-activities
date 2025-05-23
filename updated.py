@@ -12,7 +12,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from fuzzywuzzy import fuzz
 
 # --- Gemini API Setup ---
-GEMINI_API_KEY = "AIzaSyD-5XxGvhPML7TIy7_oONCUGL8Gib15YVE"
+GEMINI_API_KEY = ""
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 print("Gemini API key loaded. Ready to make API calls.")
