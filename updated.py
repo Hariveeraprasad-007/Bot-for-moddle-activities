@@ -24,6 +24,7 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--log-level=3")
+# chrome_options.add_argument("--incognito")  # Uncomment to test fresh session
 
 print("Initializing WebDriver (Chrome Headless)...")
 try:
@@ -107,8 +108,8 @@ def ask_gemini(question, options):
 print("-" * 30)
 
 # --- Login and Navigation ---
-login_url = "https://lms2.ai.saveetha.in/login/index.php"
-quiz_url = "https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1119"
+login_url = "https://lms2.eee.saveetha.in/login/index.php"
+quiz_url = "https://lms2.eee.saveetha.in/mod/quiz/view.php?id=546"
 
 try:
     print(f"Navigating to login page: {login_url}")
@@ -116,8 +117,8 @@ try:
     username_field = wait.until(EC.visibility_of_element_located((By.ID, 'username')))
     password_field = wait.until(EC.visibility_of_element_located((By.ID, 'password')))
     login_button = wait.until(EC.element_to_be_clickable((By.ID, 'loginbtn')))
-    username_field.send_keys("23009466")
-    password_field.send_keys("1554")
+    username_field.send_keys("23004568")
+    password_field.send_keys("v46662")
     login_button.click()
     print("Login attempted.")
     print("Login successful, redirected to dashboard.")
@@ -128,41 +129,94 @@ try:
     print("Arrived at quiz page.")
 except Exception as e:
     print(f"Login or quiz page navigation failed: {e}")
+    # Save page source for debugging
+    with open("login_page_source.html", "w", encoding="utf-8") as f:
+        f.write(driver.page_source)
+    print("Page source saved to 'login_page_source.html' for debugging.")
     driver.quit()
     exit()
 
 # --- Handle Quiz Start/Continue ---
-try:
-    print("Looking for quiz attempt buttons...")
-    quiz_button_xpath = "//button[contains(text(),'Attempt quiz') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')] | //input[contains(@value,'Attempt quiz') or contains(@value,'Re-attempt quiz') or contains(@value,'Continue your attempt')]"
-    quiz_button = wait.until(EC.element_to_be_clickable((By.XPATH, quiz_button_xpath)))
-    print(f"Found button: '{quiz_button.text or quiz_button.get_attribute('value')}'")
-    quiz_button.click()
-    print("Clicked quiz start/continue button.")
-    time.sleep(3)
-    try:
-        start_attempt_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt')] | //input[contains(@value,'Start attempt')]"))
-        )
-        print("Found and clicking 'Start attempt' confirmation button.")
-        start_attempt_button.click()
-        time.sleep(3)
-    except:
-        print("No 'Start attempt' confirmation button found or needed.")
-except Exception as e:
-    print(f"Could not find quiz start/continue button: {e}")
-    try:
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
-        print("Quiz already in progress, continuing.")
-    except:
-        print("Not in quiz and cannot find start button. Exiting.")
-        driver.quit()
-        exit()
+def attempt_quiz_start(max_attempts=3):
+    for attempt in range(1, max_attempts + 1):
+        print(f"\nAttempt {attempt}/{max_attempts} to start or continue quiz...")
+        try:
+            quiz_button_xpath = "//button[contains(text(),'Attempt quiz') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')] | //input[contains(@value,'Attempt quiz') or contains(@value,'Re-attempt quiz') or contains(@value,'Continue your attempt')]"
+            quiz_button = wait.until(EC.element_to_be_clickable((By.XPATH, quiz_button_xpath)))
+            button_text = quiz_button.text or quiz_button.get_attribute('value')
+            print(f"Found button: '{button_text}'")
+            driver.execute_script("arguments[0].click();", quiz_button)
+            print("Clicked quiz start/continue button.")
+            time.sleep(3)
+            
+            # Check if already in quiz by looking for question text
+            try:
+                question_element = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "qtext"))
+                )
+                print("Quiz already in progress, no 'Start attempt' button needed.")
+                return True
+            except:
+                # Look for 'Start attempt' confirmation button
+                print("Checking for 'Start attempt' confirmation button...")
+                try:
+                    start_attempt_button = WebDriverWait(driver, 20).until(
+                        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt')] | //input[contains(@value,'Start attempt')]"))
+                    )
+                    button_text = start_attempt_button.text or start_attempt_button.get_attribute('value')
+                    print(f"Found and clicking 'Start attempt' confirmation button: '{button_text}'")
+                    driver.execute_script("arguments[0].click();", start_attempt_button)
+                    time.sleep(3)
+                    # Verify quiz started by checking for question text
+                    question_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
+                    print("Quiz started successfully, question text found.")
+                    return True
+                except Exception as start_e:
+                    print(f"No 'Start attempt' confirmation button found or failed to click: {start_e}")
+                    # Double-check if quiz is already in progress
+                    try:
+                        question_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
+                        print("Quiz already in progress, proceeding without 'Start attempt' button.")
+                        return True
+                    except Exception as quiz_e:
+                        print(f"Failed to confirm quiz start or progress: {quiz_e}")
+                        if attempt == max_attempts:
+                            print(f"Max attempts ({max_attempts}) reached. Saving page source for debugging.")
+                            with open("quiz_start_page_source.html", "w", encoding="utf-8") as f:
+                                f.write(driver.page_source)
+                            print("Page source saved to 'quiz_start_page_source.html' for debugging.")
+                            return False
+                        print("Retrying...")
+                        time.sleep(2)
+        except Exception as e:
+            print(f"Could not find quiz start/continue button: {e}")
+            # Fallback check for quiz in progress
+            try:
+                question_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
+                print("Quiz already in progress, continuing.")
+                return True
+            except:
+                if attempt == max_attempts:
+                    print(f"Max attempts ({max_attempts}) reached. Saving page source for debugging.")
+                    with open("quiz_start_page_source.html", "w", encoding="utf-8") as f:
+                        f.write(driver.page_source)
+                    print("Page source saved to 'quiz_start_page_source.html' for debugging.")
+                    return False
+                print("Retrying...")
+                time.sleep(2)
+    return False
+
+# Execute quiz start with retries
+print("-" * 30)
+if not attempt_quiz_start():
+    print("Failed to start or continue quiz after retries. Exiting.")
+    driver.quit()
+    exit()
 
 print("-" * 30)
 
 # --- Process Quiz Questions ---
-num_pages_to_process = 5
+num_pages_to_process = 20
 for i in range(num_pages_to_process):
     print(f"\n--- Processing Question Page {i+1}/{num_pages_to_process} ---")
     try:
@@ -226,7 +280,7 @@ for i in range(num_pages_to_process):
             try:
                 print("Looking for 'Submit all and finish' confirmation...")
                 submit_all_xpath = "//button[contains(text(),'Submit all and finish')] | //input[contains(@value,'Submit all and finish')]"
-                submit_all_btn1 = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
+                submit_all_btn1 = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
                 driver.execute_script("arguments[0].click();", submit_all_btn1)
                 print("Clicked first 'Submit all and finish'.")
                 try:
@@ -237,6 +291,9 @@ for i in range(num_pages_to_process):
                     print("No second 'Submit all and finish' confirmation needed.")
             except Exception as submit_e:
                 print(f"Could not submit quiz: {submit_e}")
+                with open("submit_page_source.html", "w", encoding="utf-8") as f:
+                    f.write(driver.page_source)
+                print("Page source saved to 'submit_page_source.html' for debugging.")
         else:
             print("Moving to next page...")
             next_xpath = "//input[@value='Next page'] | //button[contains(text(), 'Next page')]"
@@ -259,6 +316,9 @@ for i in range(num_pages_to_process):
                 time.sleep(3)
         except Exception as nav_e:
             print(f"Navigation error after previous error: {nav_e}")
+            with open(f"question_page_{i+1}_source.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            print(f"Page source saved to 'question_page_{i+1}_source.html' for debugging.")
 
 print("\n" + "=" * 50)
 print("Quiz processing completed.")
