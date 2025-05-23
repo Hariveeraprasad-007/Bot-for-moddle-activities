@@ -5,49 +5,25 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException
 from bs4 import BeautifulSoup
 import re
-from transformers import pipeline
-import torch
-from accelerate import Accelerator
-from transformers import BitsAndBytesConfig
-from huggingface_hub import login, notebook_login
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from fuzzywuzzy import fuzz
 
-# --- Helper Function: Wait for Page Load ---
-def wait_for_page_load(driver, timeout=30):
-    try:
-        WebDriverWait(driver, timeout).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
-        print("Page load completed.")
-    except:
-        print("Page load timeout, proceeding anyway.")
+# --- Gemini API Setup ---
+GEMINI_API_KEY = "AIzaSyD-5XxGvhPML7TIy7_oONCUGL8Gib15YVE"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
-# --- Hugging Face Authentication ---
-print("Attempting to authenticate with Hugging Face Hub...")
-try:
-    notebook_login()
-    print("Hugging Face authentication successful!")
-except Exception as e:
-    print(f"Hugging Face authentication failed: {e}")
-    print("Please set HF_TOKEN or authenticate manually.")
-    exit()
-
+print("Gemini API key loaded. Ready to make API calls.")
 print("-" * 30)
 
 # --- Selenium Setup ---
 chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument("--headless=new")  # New headless mode
+chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--log-level=3")
-chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
 print("Initializing WebDriver (Chrome Headless)...")
 try:
@@ -62,38 +38,8 @@ wait = WebDriverWait(driver, 60)
 
 print("-" * 30)
 
-# --- Model Loading with Quantization ---
-model_id = "mistralai/Mistral-7B-Instruct-v0.2"
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-)
-
-print(f"Loading model: {model_id} with 4-bit quantization...")
-try:
-    qa_pipeline = pipeline(
-        "text-generation",
-        model=model_id,
-        model_kwargs={
-            "quantization_config": bnb_config,
-            "torch_dtype": torch.bfloat16,
-            "low_cpu_mem_usage": True
-        },
-        device_map="auto",
-    )
-    print("Model loaded successfully.")
-except Exception as e:
-    print(f"Error loading model {model_id}: {e}")
-    if driver:
-        driver.quit()
-    exit()
-
-print("-" * 30)
-
-# --- ask_gpt Function ---
-def ask_gpt(question, options):
+# --- ask_gemini Function ---
+def ask_gemini(question, options):
     option_letters = ['a', 'b', 'c', 'd']
     formatted_options = "\n".join([f"{letter}. {opt}" for letter, opt in zip(option_letters, options[:len(option_letters)])])
     prompt = (
@@ -102,29 +48,48 @@ def ask_gpt(question, options):
         f"Your response should be ONLY the letter of the correct option ({', '.join(option_letters[:len(options)])}) and nothing else.\n\n"
         f"Question: {question}\n\nOptions:\n{formatted_options}\n\nAnswer:"
     )
-    print(f"\nSending prompt to model:\n---\n{prompt}\n---")
+    print(f"\nSending prompt to Gemini API:\n---\n{prompt}\n---")
+    headers = {
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
+    }
     try:
-        outputs = qa_pipeline(prompt, max_new_tokens=15, do_sample=False)
-        generated_text = outputs[0]['generated_text']
-        prompt_end_index = generated_text.rfind(prompt)
-        response_text = generated_text[prompt_end_index + len(prompt):].strip().lower() if prompt_end_index != -1 else generated_text.strip().lower()
-        print(f"Model Raw Response Part: '{response_text}'")
-        potential_answer_match = re.match(r"^\s*([a-d])", response_text)
+        response = requests.post(
+            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+            json=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+        response_data = response.json()
+        generated_text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip().lower()
+        print(f"Gemini Raw Response: '{generated_text}'")
+        # Try direct letter match
+        potential_answer_match = re.match(r"^\s*([a-d])", generated_text)
         if potential_answer_match:
             direct_letter = potential_answer_match.group(1)
             if direct_letter in option_letters[:len(options)]:
                 print(f"Parsed Direct Letter Match: {direct_letter}")
                 return direct_letter
-        flexible_match = re.search(r"\b([a-d])\b", response_text)
+        # Try flexible letter match
+        flexible_match = re.search(r"\b([a-d])\b", generated_text)
         if flexible_match:
             found_letter = flexible_match.group(1)
             if found_letter in option_letters[:len(options)]:
                 print(f"Parsed Flexible Letter Match: {found_letter}")
                 return found_letter
+        # Fallback to fuzzy matching
         print("No clear letter found, attempting fuzzy match...")
         best_match_letter, best_score = "", 0
         for idx, opt in enumerate(options):
-            score = fuzz.token_set_ratio(response_text, opt.lower())
+            score = fuzz.token_set_ratio(generated_text, opt.lower())
             if score > best_score:
                 best_score = score
                 best_match_letter = option_letters[idx]
@@ -136,73 +101,51 @@ def ask_gpt(question, options):
             print(f"Fuzzy match score {best_score} below threshold {fuzzy_threshold}. Cannot determine answer.")
             return ""
     except Exception as e:
-        print(f"Error during model prediction: {e}")
+        print(f"Error during Gemini API call: {e}")
         return ""
 
 print("-" * 30)
 
 # --- Login and Navigation ---
 login_url = "https://lms2.ai.saveetha.in/login/index.php"
-quiz_url = "https://lms2.ai.saveetha.in/mod/quiz/view.php?id=837"
+quiz_url = "https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1119"
 
 try:
     print(f"Navigating to login page: {login_url}")
     driver.get(login_url)
-    wait_for_page_load(driver)
     username_field = wait.until(EC.visibility_of_element_located((By.ID, 'username')))
     password_field = wait.until(EC.visibility_of_element_located((By.ID, 'password')))
     login_button = wait.until(EC.element_to_be_clickable((By.ID, 'loginbtn')))
-    username_field.send_keys("23004568")
-    password_field.send_keys("v46662")
+    username_field.send_keys("23009466")
+    password_field.send_keys("1554")
     login_button.click()
-    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "usertext")))  # Adjust to Moodle dashboard element
+    print("Login attempted.")
     print("Login successful, redirected to dashboard.")
     time.sleep(2)
     print(f"Navigating to quiz page: {quiz_url}")
     driver.get(quiz_url)
-    wait_for_page_load(driver)
-    try:
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "page-header-headings")))
-        print("Arrived at quiz page.")
-    except:
-        print("Failed to load quiz page, saving HTML for debugging...")
-        with open("quiz_page_error.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        try:
-            error_message = driver.find_element(By.CLASS_NAME, "error").text
-            print(f"Quiz access error: {error_message}")
-        except:
-            print("No specific error message found.")
-        driver.quit()
-        exit()
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "page-header-headings")))
+    print("Arrived at quiz page.")
 except Exception as e:
     print(f"Login or quiz page navigation failed: {e}")
-    try:
-        error_message = driver.find_element(By.CLASS_NAME, "error").text
-        print(f"Login error: {error_message}")
-    except:
-        print("No login error message found.")
     driver.quit()
     exit()
 
 # --- Handle Quiz Start/Continue ---
 try:
     print("Looking for quiz attempt buttons...")
-    quiz_button_xpath = "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attempt') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue')] | //input[contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'attempt') or contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue')]"
+    quiz_button_xpath = "//button[contains(text(),'Attempt quiz') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')] | //input[contains(@value,'Attempt quiz') or contains(@value,'Re-attempt quiz') or contains(@value,'Continue your attempt')]"
     quiz_button = wait.until(EC.element_to_be_clickable((By.XPATH, quiz_button_xpath)))
-    button_text = quiz_button.text or quiz_button.get_attribute('value')
-    print(f"Found button: '{button_text}'")
-    driver.execute_script("arguments[0].click();", quiz_button)
+    print(f"Found button: '{quiz_button.text or quiz_button.get_attribute('value')}'")
+    quiz_button.click()
     print("Clicked quiz start/continue button.")
-    wait_for_page_load(driver)
     time.sleep(3)
     try:
         start_attempt_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt')] | //input[contains(@value,'Start attempt')]"))
         )
         print("Found and clicking 'Start attempt' confirmation button.")
-        driver.execute_script("arguments[0].click();", start_attempt_button)
-        wait_for_page_load(driver)
+        start_attempt_button.click()
         time.sleep(3)
     except:
         print("No 'Start attempt' confirmation button found or needed.")
@@ -212,20 +155,17 @@ except Exception as e:
         wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
         print("Quiz already in progress, continuing.")
     except:
-        print("Not in quiz and cannot find start button. Saving HTML for debugging...")
-        with open("quiz_start_error.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
+        print("Not in quiz and cannot find start button. Exiting.")
         driver.quit()
         exit()
 
 print("-" * 30)
 
 # --- Process Quiz Questions ---
-num_pages_to_process = 10
+num_pages_to_process = 5
 for i in range(num_pages_to_process):
     print(f"\n--- Processing Question Page {i+1}/{num_pages_to_process} ---")
     try:
-        wait_for_page_load(driver)
         question_element = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "qtext")))
         question_text = question_element.text.strip()
         print(f"Question Text: {question_text[:200]}...")
@@ -256,8 +196,8 @@ for i in range(num_pages_to_process):
                         continue
         print(f"Parsed Options ({len(option_texts)}): {option_texts}")
         if option_texts and len(option_texts) == len(radio_elements):
-            model_answer_letter = ask_gpt(question_text, option_texts)
-            print(f"Model's Chosen Letter: '{model_answer_letter}'")
+            model_answer_letter = ask_gemini(question_text, option_texts)
+            print(f"Gemini's Chosen Letter: '{model_answer_letter}'")
             clicked = False
             if model_answer_letter and model_answer_letter in 'abcd'[:len(option_texts)]:
                 try:
@@ -280,63 +220,45 @@ for i in range(num_pages_to_process):
         if i == num_pages_to_process - 1:
             print("Attempting to finish quiz...")
             finish_xpath = "//input[@value='Finish attempt ...'] | //button[contains(text(), 'Finish attempt')]"
+            finish_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, finish_xpath)))
+            driver.execute_script("arguments[0].click();", finish_btn)
+            print("Clicked 'Finish attempt'.")
             try:
-                finish_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, finish_xpath)))
-                driver.execute_script("arguments[0].click();", finish_btn)
-                print("Clicked 'Finish attempt'.")
-                wait_for_page_load(driver)
+                print("Looking for 'Submit all and finish' confirmation...")
+                submit_all_xpath = "//button[contains(text(),'Submit all and finish')] | //input[contains(@value,'Submit all and finish')]"
+                submit_all_btn1 = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
+                driver.execute_script("arguments[0].click();", submit_all_btn1)
+                print("Clicked first 'Submit all and finish'.")
                 try:
-                    submit_all_xpath = "//button[contains(text(),'Submit all and finish')] | //input[contains(@value,'Submit all and finish')]"
-                    submit_all_btn1 = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
-                    driver.execute_script("arguments[0].click();", submit_all_btn1)
-                    print("Clicked first 'Submit all and finish'.")
-                    wait_for_page_load(driver)
-                    try:
-                        submit_all_btn2 = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
-                        driver.execute_script("arguments[0].click();", submit_all_btn2)
-                        print("Clicked second 'Submit all and finish'.")
-                    except:
-                        print("No second 'Submit all and finish' confirmation needed.")
-                except Exception as submit_e:
-                    print(f"Could not submit quiz: {submit_e}")
-                    with open("submit_error.html", "w", encoding="utf-8") as f:
-                        f.write(driver.page_source)
-            except Exception as finish_e:
-                print(f"Could not find 'Finish attempt' button: {finish_e}")
-                with open("finish_error.html", "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
+                    submit_all_btn2 = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
+                    driver.execute_script("arguments[0].click();", submit_all_btn2)
+                    print("Clicked second 'Submit all and finish'.")
+                except:
+                    print("No second 'Submit all and finish' confirmation needed.")
+            except Exception as submit_e:
+                print(f"Could not submit quiz: {submit_e}")
         else:
             print("Moving to next page...")
             next_xpath = "//input[@value='Next page'] | //button[contains(text(), 'Next page')]"
-            try:
-                next_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, next_xpath)))
-                driver.execute_script("arguments[0].click();", next_btn)
-                print("Clicked 'Next page'.")
-                wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
-                time.sleep(1)
-            except Exception as nav_e:
-                print(f"Navigation error: {nav_e}")
-                with open(f"page_{i+1}_error.html", "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
+            next_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, next_xpath)))
+            driver.execute_script("arguments[0].click();", next_btn)
+            print("Clicked 'Next page'.")
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
+            time.sleep(1)
     except Exception as e:
         print(f"Error processing Question Page {i+1}: {e}")
-        with open(f"question_page_{i+1}_error.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        if i == num_pages_to_process - 1:
-            print("Attempting to finish quiz after error...")
-            try:
+        try:
+            if i == num_pages_to_process - 1:
+                print("Attempting to finish quiz after error...")
                 finish_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, finish_xpath)))
                 driver.execute_script("arguments[0].click();", finish_btn)
-            except:
-                print("Could not finish quiz after error.")
-        else:
-            print("Attempting next page after error...")
-            try:
+            else:
+                print("Attempting next page after error...")
                 next_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, next_xpath)))
                 driver.execute_script("arguments[0].click();", next_btn)
                 time.sleep(3)
-            except:
-                print("Could not navigate to next page after error.")
+        except Exception as nav_e:
+            print(f"Navigation error after previous error: {nav_e}")
 
 print("\n" + "=" * 50)
 print("Quiz processing completed.")
