@@ -109,7 +109,7 @@ print("-" * 30)
 
 # --- Login and Navigation ---
 login_url = "https://lms2.eee.saveetha.in/login/index.php"
-quiz_url = "https://lms2.eee.saveetha.in/mod/quiz/view.php?id=546"
+quiz_url = "https://lms2.eee.saveetha.in/mod/quiz/view.php?id=551"
 
 try:
     print(f"Navigating to login page: {login_url}")
@@ -129,7 +129,6 @@ try:
     print("Arrived at quiz page.")
 except Exception as e:
     print(f"Login or quiz page navigation failed: {e}")
-    # Save page source for debugging
     with open("login_page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
     print("Page source saved to 'login_page_source.html' for debugging.")
@@ -216,11 +215,17 @@ if not attempt_quiz_start():
 print("-" * 30)
 
 # --- Process Quiz Questions ---
-num_pages_to_process = 20
-for i in range(num_pages_to_process):
-    print(f"\n--- Processing Question Page {i+1}/{num_pages_to_process} ---")
+page_count = 0
+finish_attempt_xpath = "//input[@value='Finish attempt ...' and @name='next' and @id='mod_quiz-next-nav']"
+while True:
+    page_count += 1
+    print(f"\n--- Processing Question Page {page_count} ---")
+    
+    # Process the current question (if any)
     try:
-        question_element = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "qtext")))
+        question_element = WebDriverWait(driver, 5).until(
+            EC.visibility_of_element_located((By.CLASS_NAME, "qtext"))
+        )
         question_text = question_element.text.strip()
         print(f"Question Text: {question_text[:200]}...")
         answer_block_element = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "answer")))
@@ -267,58 +272,63 @@ for i in range(num_pages_to_process):
                 except Exception as click_e:
                     print(f"Error clicking option {model_answer_letter}: {click_e}")
             if not clicked:
-                print(f"Could not click an option for question {i+1}.")
+                print(f"Could not click an option for question {page_count}.")
         else:
             print("Warning: Failed to parse options or link to Selenium elements.")
-        print("-" * 20)
-        if i == num_pages_to_process - 1:
-            print("Attempting to finish quiz...")
-            finish_xpath = "//input[@value='Finish attempt ...'] | //button[contains(text(), 'Finish attempt')]"
-            finish_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, finish_xpath)))
+    except Exception as e:
+        print(f"No question found or error processing question on page {page_count}: {e}")
+
+    # Check if "Finish attempt ..." button is present
+    try:
+        finish_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, finish_attempt_xpath)))
+        print("Found 'Finish attempt ...' button. Proceeding with quiz submission...")
+        # Execute quiz submission sequence
+        try:
             driver.execute_script("arguments[0].click();", finish_btn)
-            print("Clicked 'Finish attempt'.")
-            try:
-                print("Looking for 'Submit all and finish' confirmation...")
-                submit_all_xpath = "//button[contains(text(),'Submit all and finish')] | //input[contains(@value,'Submit all and finish')]"
-                submit_all_btn1 = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
-                driver.execute_script("arguments[0].click();", submit_all_btn1)
-                print("Clicked first 'Submit all and finish'.")
-                try:
-                    submit_all_btn2 = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath)))
-                    driver.execute_script("arguments[0].click();", submit_all_btn2)
-                    print("Clicked second 'Submit all and finish'.")
-                except:
-                    print("No second 'Submit all and finish' confirmation needed.")
-            except Exception as submit_e:
-                print(f"Could not submit quiz: {submit_e}")
-                with open("submit_page_source.html", "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
-                print("Page source saved to 'submit_page_source.html' for debugging.")
-        else:
-            print("Moving to next page...")
+            print("Clicked 'Finish attempt ...' button.")
+            time.sleep(2)
+
+            # Step 1: Click first "Submit all and finish" button
+            submit_all_xpath1 = "//button[@type='submit' and contains(text(), 'Submit all and finish')]"
+            submit_all_btn1 = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath1)))
+            driver.execute_script("arguments[0].click();", submit_all_btn1)
+            print("Clicked first 'Submit all and finish' button.")
+            time.sleep(2)
+
+            # Step 2: Click second "Submit all and finish" button
+            submit_all_xpath2 = "//button[@type='button' and @data-action='save' and contains(text(), 'Submit all and finish')]"
+            submit_all_btn2 = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, submit_all_xpath2)))
+            driver.execute_script("arguments[0].click();", submit_all_btn2)
+            print("Clicked second 'Submit all and finish' button.")
+            time.sleep(2)
+
+            # Step 3: Click "Finish review" link
+            finish_review_xpath = "//a[@class='mod_quiz-next-nav' and contains(text(), 'Finish review')]"
+            finish_review_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, finish_review_xpath)))
+            driver.execute_script("arguments[0].click();", finish_review_btn)
+            print("Clicked 'Finish review' link.")
+            break  # Exit the while loop after submission
+        except Exception as submit_e:
+            print(f"Error during quiz submission sequence: {submit_e}")
+            with open("submit_page_source.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            print("Page source saved to 'submit_page_source.html' for debugging.")
+            break  # Exit loop to avoid infinite loop on submission failure
+    except:
+        print("No 'Finish attempt ...' button found. Moving to next page...")
+        try:
             next_xpath = "//input[@value='Next page'] | //button[contains(text(), 'Next page')]"
             next_btn = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, next_xpath)))
             driver.execute_script("arguments[0].click();", next_btn)
             print("Clicked 'Next page'.")
             wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
             time.sleep(1)
-    except Exception as e:
-        print(f"Error processing Question Page {i+1}: {e}")
-        try:
-            if i == num_pages_to_process - 1:
-                print("Attempting to finish quiz after error...")
-                finish_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, finish_xpath)))
-                driver.execute_script("arguments[0].click();", finish_btn)
-            else:
-                print("Attempting next page after error...")
-                next_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, next_xpath)))
-                driver.execute_script("arguments[0].click();", next_btn)
-                time.sleep(3)
         except Exception as nav_e:
-            print(f"Navigation error after previous error: {nav_e}")
-            with open(f"question_page_{i+1}_source.html", "w", encoding="utf-8") as f:
+            print(f"Error navigating to next page: {nav_e}")
+            with open(f"question_page_{page_count}_source.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
-            print(f"Page source saved to 'question_page_{i+1}_source.html' for debugging.")
+            print(f"Page source saved to 'question_page_{page_count}_source.html' for debugging.")
+            break  # Exit loop to avoid infinite loop on navigation failure
 
 print("\n" + "=" * 50)
 print("Quiz processing completed.")
