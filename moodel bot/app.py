@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from bot import run_bot  # Import the bot logic from bot.py
 
@@ -24,9 +25,10 @@ def main():
             help="Direct URL to the quiz page"
         )
         api_key = st.text_input(
-            "API Key",
+            "Gemini API Key",
+            type="password",
             placeholder="Enter your Gemini API key",
-            help="Your Gemini API key for the bot"
+            help="Your Gemini API key is required for the bot to answer questions. Keep it secure and do not share it."
         )
         submit_button = st.form_submit_button("Start Bot")
     
@@ -40,7 +42,7 @@ def main():
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
         else:
-            st.error("Please fill in all fields.")
+            st.error("Please fill in all fields, including the Gemini API key.")
     
     # Instructions section
     with st.expander("Instructions"):
@@ -49,6 +51,7 @@ def main():
         1. **Enter your Moodle username and password** in the fields above.
         2. **Provide the URL of the quiz** you want to attempt. This should be the direct link to the quiz page on your Moodle site.
         3. **Enter your Gemini API key**. This is required for the bot to answer questions. **Keep your API key secure and do not share it.**
+           - If you don’t have a Gemini API key, you can obtain one by visiting [Google AI Studio](https://ai.google.dev) and following the instructions to generate an API key.
         4. **Click 'Start Bot'** to begin the automation process.
         
         The bot will log in to your Moodle account, navigate to the quiz, and attempt to answer the questions using the Gemini API. Check the terminal for detailed progress logs if needed.
