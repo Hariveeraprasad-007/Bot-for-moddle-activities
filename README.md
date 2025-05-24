@@ -1,8 +1,8 @@
 # Bot-for-moddle-activities
 ## LINK FOR THE APP:
-'''
+```
 https://vigilant-fiesta-97jqp9xpv9xxh7p4p-8501.app.github.dev/
-'''
+```
 ```bash
 !pip install selenium webdriver_manager transformers fuzzywuzzy beautifulsoup4
 ```
