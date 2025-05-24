@@ -1,3 +1,18 @@
+# Install system dependencies and Google Chrome
+!wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+!echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+!apt-get update
+!apt-get install -y google-chrome-stable
+!apt-get install -y xvfb
+!apt-get update -y
+!apt-get install -y wget unzip libxi6 libgconf-2-4
+!wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+!dpkg -i google-chrome-stable_current_amd64.deb
+!apt-get -f install -y
+
+# Install Python dependencies
+!pip install streamlit selenium beautifulsoup4 fuzzywuzzy python-Levenshtein webdriver-manager google-generativeai pyngrok
+
 import streamlit as st
 import os
 import time
@@ -11,6 +26,7 @@ import re
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from fuzzywuzzy import fuzz
+from pyngrok import ngrok
 
 # Streamlit Interface
 st.title("Moodle Quiz Automation")
@@ -22,6 +38,7 @@ quiz_url = st.text_input("Quiz URL", placeholder="e.g., https://lms2.eee.saveeth
 username = st.text_input("Username")
 password = st.text_input("Password", type="password")
 gemini_api_key = st.text_input("Gemini API Key", type="password")
+ngrok_auth_token = st.text_input("Ngrok Auth Token", type="password", placeholder="Enter your Ngrok auth token")
 start_button = st.button("Start Quiz Automation")
 
 # Instructions for Gemini API Key
@@ -51,12 +68,40 @@ with st.expander("How to Create a Gemini API Key"):
        - See [Google’s documentation](https://ai.google.dev/docs) for details.
     """)
 
+# Instructions for Ngrok
+with st.expander("How to Get an Ngrok Auth Token"):
+    st.markdown("""
+    To run this app in Google Colab, you need an Ngrok auth token to expose the Streamlit server.
+    
+    1. **Sign Up for Ngrok**:
+       - Go to [Ngrok](https://ngrok.com/) and create a free account.
+    
+    2. **Get Your Auth Token**:
+       - After signing in, go to the [Ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
+       - Copy your auth token (e.g., `2abc123xyz...`).
+    
+    3. **Enter the Token**:
+       - Paste the token into the input field above.
+    
+    4. **Free Tier Limits**:
+       - The free tier is sufficient for temporary use. For persistent use, consider a paid plan.
+    """)
+
 # Main logic
 if start_button:
-    if not all([login_url, quiz_url, username, password, gemini_api_key]):
+    if not all([login_url, quiz_url, username, password, gemini_api_key, ngrok_auth_token]):
         st.error("Please fill in all input fields.")
     else:
-        with st.spinner("Starting quiz automation..."):
+        with st.spinner("Setting up Ngrok and starting quiz automation..."):
+            # Set up Ngrok
+            try:
+                ngrok.set_auth_token(ngrok_auth_token)
+                public_url = ngrok.connect(8501)
+                st.write(f"Streamlit app is live at: {public_url}")
+            except Exception as e:
+                st.error(f"Failed to set up Ngrok: {e}")
+                st.stop()
+
             # --- Gemini API Setup ---
             GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
             st.write("Gemini API key loaded. Ready to make API calls.")
@@ -68,6 +113,7 @@ if start_button:
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--log-level=3")
+            chrome_options.binary_location = "/usr/bin/google-chrome"  # Ensure Chrome path
 
             st.write("Initializing WebDriver (Chrome Headless)...")
             try:
