@@ -52,7 +52,7 @@ with st.expander("How to Create a Gemini API Key"):
     
     2. **Generate API Key**:
        - Click **Create API Key**.
-       - Copy the key (e.g., `AIzaSyD-5XxGvhPML7TIy7_oONCUGL8Gib15YVE`).
+       - Copy the key (e.g., `XXXXXXXXXXXXXXXXXXXXXXXXXXX`).
     
     3. **Set Up Billing (if needed)**:
        - The Gemini 1.5 Flash API has a free tier (~1,500 requests/day).
