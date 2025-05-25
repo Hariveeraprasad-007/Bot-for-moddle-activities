@@ -522,25 +522,23 @@ if submit_button:
                                 <th>Error</th>
                             </tr>
                     """, unsafe_allow_html=True)
-                    for result in quiz_results:
-            status_icon = "✅" if result["status"] == "Completed" else "❌"
-            error_text = result["error"] if result["error"] else "-"
-            table_html += f"""
-                <tr>
+                for result in quiz_results:
+                    status_icon = "✅" if result["status"] == "Completed" else "❌"
+                    error_text = result["error"] if result["error"] else "-"
+                    table_html += f"""
+                    <tr>
                     <td>{result['url'][:50]}...</td>
                     <td>{status_icon} {result['status']}</td>
                     <td>{result['marks']}</td>
                     <td>{error_text}</td>
-                </tr>
-            """
-        # Close the table and add the link
-        table_html += """
-            </table>
-            <a href="#quiz-results">Quiz Results</a>
-        """
-        # Render the complete table in one st.markdown call
-        st.markdown(table_html, unsafe_allow_html=True)
-    else:
-        st.markdown('<p class="error">No results to display.</p>', unsafe_allow_html=True)
+                    </tr>
+                    """
+                    table_html += """
+                    </table>
+                    <a href="#quiz-results">Quiz Results</a>
+                    """
+                    st.markdown(table_html, unsafe_allow_html=True)
+                else:
+                    st.markdown('<p class="error">No results to display.</p>', unsafe_allow_html=True)
 
-            driver.quit()
+driver.quit()
