@@ -4,12 +4,10 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
-import json
 from bs4 import BeautifulSoup
 import requests
 import re
 from datetime import datetime, timedelta
-import os
 import pandas as pd
 from io import StringIO
 
@@ -269,10 +267,6 @@ def main():
     st.markdown('<h1>Moodle Quiz Automator</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Automate your Moodle quizzes with ease</p>', unsafe_allow_html=True)
 
-    # Use a relative path for user_details.json (same directory as the script)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    user_details_file = os.path.join(script_dir, "user_details.json")
-
     # Initialize session state for user details and other data
     if "user_details" not in st.session_state:
         st.session_state.user_details = {"username": "", "password": "", "gemini_api_key": ""}
@@ -287,17 +281,8 @@ def main():
     if "sort_ascending" not in st.session_state:
         st.session_state.sort_ascending = True
 
-    # Load user details from file if it exists
-    user_details = st.session_state.user_details.copy()
-    try:
-        if os.path.exists(user_details_file):
-            with open(user_details_file, "r") as f:
-                user_details = json.load(f)
-                st.session_state.user_details.update(user_details)
-    except Exception as e:
-        st.warning(f"Could not load user details from file: {str(e)}. Using session state instead.")
-
     # Form for user input
+    user_details = st.session_state.user_details
     with st.form(key="automation_form"):
         st.markdown('<div class="form-container">', unsafe_allow_html=True)
         st.markdown('<label class="form-label" for="login_url">Login URL</label>', unsafe_allow_html=True)
@@ -314,8 +299,7 @@ def main():
         st.markdown('<label class="form-label" for="gemini_api_key">Gemini API Key</label>', unsafe_allow_html=True)
         gemini_api_key = st.text_input("Gemini API Key", value=user_details["gemini_api_key"], type="password", placeholder="Enter your Gemini API key", key="gemini_api_key")
         st.markdown('<label class="form-label" for="quiz_urls">Quiz URLs (comma-separated)</label>', unsafe_allow_html=True)
-        quiz_urls = st.text_area("Quiz URLs", value="https://lms2.ai.saveetha.in/mod/quiz/view.php?id=1790", placeholder="Enter quiz URLs, separated by commas", key="quiz_urls")
-        save_credentials = st.checkbox("Save credentials for future use", value=True)
+        quiz_urls = st.text_area("Quiz URLs", placeholder="Enter quiz URLs, separated by commas", key="quiz_urls")  # Removed default value
         st.markdown('<div class="button-container">', unsafe_allow_html=True)
         submit_button = st.form_submit_button("Start Automation", type="primary")
         clear_button = st.form_submit_button("Clear Form", type="secondary")
@@ -412,16 +396,6 @@ def main():
             user_details = {"username": username, "password": password, "gemini_api_key": gemini_api_key}
             st.session_state.user_details.update(user_details)
 
-            # Save user details to file if checkbox is selected
-            if save_credentials:
-                try:
-                    os.makedirs(script_dir, exist_ok=True)
-                    with open(user_details_file, "w") as f:
-                        json.dump(user_details, f, indent=4)
-                    update_progress("User details saved to file")
-                except Exception as e:
-                    update_progress(f"Failed to save user details to file: {str(e)}", is_error=True)
-
             # Initialize Selenium WebDriver
             try:
                 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
@@ -503,13 +477,6 @@ def main():
                         update_progress(f"[Quiz {quiz_index}/{total_quizzes}] Processing question page {page_count}")
                         start_time = time.time()
 
-                        # Save page source for debugging
-                        try:
-                            with open(f"question_page_{quiz_index}_{page_count}_source.html", "w", encoding="utf-8") as f:
-                                f.write(driver.page_source)
-                        except Exception as e:
-                            update_progress(f"Failed to save page source: {str(e)}", is_error=True)
-
                         # Extract question and options
                         soup = BeautifulSoup(driver.page_source, "html.parser")
                         question = soup.select_one(".qtext").get_text(strip=True) if soup.select_one(".qtext") else ""
@@ -570,12 +537,6 @@ def main():
                         update_progress(f"[Quiz {quiz_index}/{total_quizzes}] Failed to submit quiz: {str(e)}", is_error=True)
 
                     # Extract marks
-                    try:
-                        with open(f"marks_page_source_{quiz_index}.html", "w", encoding="utf-8") as f:
-                            f.write(driver.page_source)
-                    except Exception as e:
-                        update_progress(f"Failed to save marks page source: {str(e)}", is_error=True)
-
                     soup = BeautifulSoup(driver.page_source, "html.parser")
                     table = soup.select_one("table.quizattemptsummary")
                     if table:
