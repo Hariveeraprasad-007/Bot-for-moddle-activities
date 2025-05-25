@@ -115,8 +115,13 @@ if submit_button:
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             try:
-                driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+                # Force latest ChromeDriver
+                driver = webdriver.Chrome(
+                    service=ChromeService(ChromeDriverManager().install()),
+                    options=chrome_options
+                )
                 wait = WebDriverWait(driver, 15)
+                update_progress("WebDriver initialized successfully")
             except Exception as e:
                 st.markdown(f'<p class="error">Failed to initialize WebDriver: {e}</p>', unsafe_allow_html=True)
                 st.stop()
