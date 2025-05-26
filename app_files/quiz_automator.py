@@ -10,7 +10,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
-import uuid
+import os
 
 # Streamlit configuration
 st.set_page_config(page_title="Moodle Quiz Automator", layout="centered")
@@ -75,7 +75,7 @@ def ask_gemini(question, options, gemini_api_key):
         response.raise_for_status()
         generated_text = response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip().lower()
         match = re.match(r"^\s*([a-d])", generated_text)
-        return match.group(1) if match and match.group(1) in option_letters[:len(options)] else "", time.time() - start_time
+        return match.group(1) if match and match.group(1) in option_letters[:len(options)] else "", time.time() - start_time, None
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
             return "", time.time() - start_time, "Rate limit exceeded for Gemini API"
@@ -122,15 +122,39 @@ if submit_button:
             # Selenium setup
             driver = None
             try:
+                # Verify ChromeDriver
+                chromedriver_path = ChromeDriverManager().install()
+                if os.path.exists(chromedriver_path):
+                    os.chmod(chromedriver_path, 0o755)  # Ensure executable permissions
+                    update_progress(f"ChromeDriver found at: {chromedriver_path}")
+                else:
+                    raise Exception("ChromeDriver not found after installation")
+
                 chrome_options = webdriver.ChromeOptions()
-                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--headless=new")  # Use new headless mode
                 chrome_options.add_argument("--no-sandbox")
                 chrome_options.add_argument("--disable-dev-shm-usage")
                 chrome_options.add_argument("--disable-gpu")
-                driver = webdriver.Chrome(
-                    service=ChromeService(ChromeDriverManager().install()),
-                    options=chrome_options
-                )
+                chrome_options.add_argument("--disable-extensions")
+                chrome_options.add_argument("--disable-setuid-sandbox")
+                chrome_options.add_argument("--window-size=1920,1080")
+                chrome_options.add_argument("--remote-debugging-port=9222")
+                chrome_options.add_argument("--disable-background-timer-throttling")
+                chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+                chrome_options.add_argument("--disable-breakpad")
+                chrome_options.add_argument("--disable-client-side-phishing-detection")
+                chrome_options.add_argument("--disable-cast")
+                chrome_options.add_argument("--disable-cast-streaming-hw-encoding")
+                chrome_options.add_argument("--disable-cloud-import")
+                chrome_options.add_argument("--disable-popup-blocking")
+                chrome_options.add_argument("--ignore-certificate-errors")
+                chrome_options.add_argument("--disable-session-crashed-bubble")
+                chrome_options.add_argument("--disable-ipv6")
+                chrome_options.add_argument("--allow-http-screen-capture")
+                chrome_options.add_argument("--start-maximized")
+                
+                service = ChromeService(chromedriver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
                 wait = WebDriverWait(driver, 20)  # Increased timeout
                 update_progress("WebDriver initialized successfully")
             except Exception as e:
