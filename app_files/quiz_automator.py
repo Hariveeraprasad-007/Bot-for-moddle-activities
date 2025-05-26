@@ -9,7 +9,6 @@ from bs4 import BeautifulSoup
 import re
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
-from fuzzywuzzy import fuzz
 from datetime import datetime
 
 # Streamlit configuration
