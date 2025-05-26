@@ -1,5 +1,7 @@
-streamlit==1.38.0 
-selenium==4.25.0
-webdriver-manager==4.0.2
-requests==2.32.3
-beautifulsoup4==4.12.3
+streamlit
+selenium
+webdriver_manager
+requests
+beautifulsoup4
+python-dateutil
+fuzzywuzzy
