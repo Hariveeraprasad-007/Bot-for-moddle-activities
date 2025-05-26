@@ -4,13 +4,14 @@ import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver suport import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 import os
+import subprocess
 
 # Streamlit configuration
 st.set_page_config(page_title="Moodle Quiz Automator", layout="centered")
@@ -122,11 +123,24 @@ if submit_button:
             # Selenium setup
             driver = None
             try:
+                # Verify Chrome and ChromeDriver versions
+                try:
+                    chrome_version = subprocess.check_output(["google-chrome", "--version"]).decode().strip()
+                    update_progress(f"Google Chrome version: {chrome_version}")
+                except Exception as e:
+                    update_progress(f"Failed to get Chrome version: {e}")
+                    chrome_version = "Unknown"
+
                 # Verify ChromeDriver
                 chromedriver_path = ChromeDriverManager().install()
                 if os.path.exists(chromedriver_path):
                     os.chmod(chromedriver_path, 0o755)  # Ensure executable permissions
-                    update_progress(f"ChromeDriver found at: {chromedriver_path}")
+                    try:
+                        chromedriver_version = subprocess.check_output([chromedriver_path, "--version"]).decode().strip()
+                        update_progress(f"ChromeDriver found at: {chromedriver_path}, version: {chromedriver_version}")
+                    except Exception as e:
+                        update_progress(f"Failed to get ChromeDriver version: {e}")
+                        chromedriver_version = "Unknown"
                 else:
                     raise Exception("ChromeDriver not found after installation")
 
@@ -153,12 +167,33 @@ if submit_button:
                 chrome_options.add_argument("--allow-http-screen-capture")
                 chrome_options.add_argument("--start-maximized")
                 
-                service = ChromeService(chromedriver_path)
+                # Enable ChromeDriver logging
+                service = ChromeService(chromedriver_path, log_path="chromedriver.log")
                 driver = webdriver.Chrome(service=service, options=chrome_options)
-                wait = WebDriverWait(driver, 20)  # Increased timeout
+                wait = WebDriverWait(driver, 20)
                 update_progress("WebDriver initialized successfully")
+                
+                # Provide ChromeDriver log for download
+                if os.path.exists("chromedriver.log"):
+                    with open("chromedriver.log", "r") as f:
+                        log_content = f.read()
+                    st.download_button(
+                        label="Download ChromeDriver Log",
+                        data=log_content,
+                        file_name="chromedriver.log",
+                        mime="text/plain"
+                    )
             except Exception as e:
                 st.markdown(f'<p class="error">Failed to initialize WebDriver: {e}</p>', unsafe_allow_html=True)
+                if os.path.exists("chromedriver.log"):
+                    with open("chromedriver.log", "r") as f:
+                        log_content = f.read()
+                    st.download_button(
+                        label="Download ChromeDriver Log",
+                        data=log_content,
+                        file_name="chromedriver_error.log",
+                        mime="text/plain"
+                    )
                 st.stop()
 
             try:
@@ -170,7 +205,7 @@ if submit_button:
                 for attempt in range(max_retries):
                     if check_http_error(driver):
                         update_progress(f"HTTP error detected during login, retrying (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        time.sleep(2 ** attempt)
                         driver.refresh()
                         continue
                     break
@@ -367,73 +402,5 @@ if submit_button:
                                             timestamp_match = re.search(r"Submitted\s+\w+,\s+(\d+\s+\w+\s+\d{4},\s+\d+:\d+\s+[AP]M)", timestamp_text)
                                             if timestamp_match:
                                                 timestamp = datetime.strptime(timestamp_match.group(1), "%d %B %Y, %I:%M %p")
-                                                time_diff = (current_time - timestamp).total_seconds() / 60
-                                                if time_diff < 10 and (latest_timestamp is None or timestamp > latest_timestamp):
-                                                    latest_marks = marks
-                                                    latest_timestamp = timestamp
-                                    except:
-                                        continue
-                                update_progress(f"Marks extracted: {latest_marks}", quiz_index, len(quiz_url_list), duration=time.time() - start_time)
-                                result["status"] = "Completed"
-                                result["marks"] = latest_marks
-                                quiz_results.append(result)
-                                break
-                            except Exception as e:
-                                result["error"] = f"Failed to extract marks: {e}"
-                                page_source = driver.page_source
-                                st.download_button(
-                                    label=f"Download Quiz {quiz_index} Marks Page Source",
-                                    data=page_source,
-                                    file_name=f"marks_page_source_{quiz_index}.html",
-                                    mime="text/html"
-                                )
-                                quiz_results.append(result)
-                                break
-                        except:
-                            start_time = time.time()
-                            update_progress("No 'Finish attempt ...' button found, checking for next page", quiz_index, len(quiz_url_list))
-                            try:
-                                next_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='Next page']")))
-                                driver.execute_script("arguments[0].click();", next_btn)
-                                for attempt in range(max_retries):
-                                    if check_http_error(driver):
-                                        update_progress(f"HTTP error detected after next page click, retrying (attempt {attempt + 1}/{max_retries})", quiz_index, len(quiz_url_list))
-                                        time.sleep(2 ** attempt)
-                                        driver.refresh()
-                                        continue
-                                    break
-                                else:
-                                    update_progress(f"Failed to bypass HTTP error after next page click", quiz_index, len(quiz_url_list))
-                                    st.markdown(f'<p class="error">Failed to bypass HTTP error for question {page_count} in quiz {quiz_index}</p>', unsafe_allow_html=True)
-                                    break
-                                wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
-                                update_progress("Clicked 'Next page'", quiz_index, len(quiz_url_list), duration=time.time() - start_time)
-                            except Exception as e:
-                                result["error"] = f"Failed to navigate to next page: {e}"
-                                page_source = driver.page_source
-                                st.download_button(
-                                    label=f"Download Quiz {quiz_index} Page {page_count} Source",
-                                    data=page_source,
-                                    file_name=f"question_page_{quiz_index}_{page_count}_source.html",
-                                    mime="text/html"
-                                )
-                                quiz_results.append(result)
-                                break
+                                                time_diff
 
-                # Display results
-                status_text.text("All quizzes processed!")
-                progress_bar.empty()
-                st.markdown('<p class="success">Processing complete!</p>', unsafe_allow_html=True)
-                with st.expander("📊 Quiz Results", expanded=True):
-                    for result in quiz_results:
-                        st.markdown(f"*Quiz URL*: {result['url']}")
-                        st.markdown(f"- *Status*: <span class='{'success' if result['status'] == 'Completed' else 'error'}'>{result['status']}</span>", unsafe_allow_html=True)
-                        st.markdown(f"- *Marks*: {result['marks']}")
-                        if result['error']:
-                            st.markdown(f"- *Error*: <span class='error'>{result['error']}</span>", unsafe_allow_html=True)
-                        st.markdown("---")
-
-            finally:
-                if driver:
-                    driver.quit()
-                    update_progress("WebDriver closed")
