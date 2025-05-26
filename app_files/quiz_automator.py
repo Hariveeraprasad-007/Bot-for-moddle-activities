@@ -119,7 +119,7 @@ if submit_button:
             chrome_options.add_argument("--disable-dev-shm-usage")
             try:
                 driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
-                wait = WebDriverWait(driver, 5)  # Reduced from 30s
+                wait = WebDriverWait(driver, 15)  # Reduced from 30s
             except Exception as e:
                 st.markdown(f'<p class="error">Failed to initialize WebDriver: {e}</p>', unsafe_allow_html=True)
                 st.stop()
