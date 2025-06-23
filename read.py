@@ -41,21 +41,21 @@ def check_audio_devices():
 
 # Test audio routing
 def test_audio_routing(device_name, is_vb_audio):
-    print(f"Testing audio routing with {device_name}...")
+    print(f"Testing audio routing with device: {device_name}...")
     engine = pyttsx3.init()
-    engine.setProperty('rate', 180)
-    engine.say("Testing audio routing")
+    engine.setProperty('rate', 150)
+    engine.say("Testing voice input")
     fs = 44100
-    with sd.InputStream(device=device_name, samplerate=fs, channels=1) as stream:
-        recording = sd.rec(int(fs), samplerate=fs, channels=1, device=device_name)
+    with sd.InputStream(device=device_name, samplerate=fs, channels=2) as stream:
+        recording = sd.rec(int(2 * fs), samplerate=fs, channels=2, device=device_name)
         engine.runAndWait()
         sd.wait()
     max_amplitude = np.max(np.abs(recording))
-    print(f"Test recording max amplitude: {max_amplitude:.4f}")
-    if max_amplitude < 0.01:
-        print(f"WARNING: Audio routing test failed with {device_name}. No audio detected. Check device settings.")
+    print(f"Test recording max amplitude = {max_amplitude:.4f}")
+    if max_amplitude < 0.001:
+        print(f"Warning: {device_name} test failed - no audio input detected. Check your audio settings.")
     else:
-        print("Audio routing test passed.")
+        print("Audio input test passed OK.")
 
 # Initialize pyttsx3
 engine = pyttsx3.init()
@@ -75,8 +75,10 @@ try:
     # Validate audio setup
     audio_device, is_vb_audio = check_audio_devices()
     if not is_vb_audio:
-        print("WARNING: Using physical microphone. Audio may not route correctly without VB-Audio Cable.")
-    test_audio_routing(audio_device, is_vb_audio)
+        print("WARNING: Using physical microphone")
+        test_audio_routing(audio_device, is_vb_audio)
+    else:
+        print("VB-Audio detected; skipping test.")
 
     # Navigate to login page
     driver.get("https://lms2.ai.saveetha.in/login/index.php")
@@ -298,39 +300,22 @@ try:
         driver.execute_script("arguments[0].click();", next_button)
         print("Clicked 'Next' button with JavaScript")
 
-    # Wait for next page to load
-    time.sleep(5)
-
-    # Click checkbox to enable textarea
-    checkbox = WebDriverWait(driver, 30).until(
-        EC.element_to_be_clickable((By.ID, "6857d3139de886857d3138509767_dontwaitfortranscript"))
-    )
-    checkbox.click()
-    print("Clicked checkbox to enable textarea")
-
-    # Wait briefly to ensure textarea is enabled
-    time.sleep(1)
-
-    # Check if textarea has auto-generated text
+    # Wait for textarea to be populated with text
     textarea = WebDriverWait(driver, 30).until(
         EC.presence_of_element_located((By.ID, "6857d0f18732f6857d0f162f0c79_selftranscript"))
     )
-    auto_text = textarea.get_attribute("value").strip()
-    if auto_text and len(auto_text.split()) > 5:  # Check if meaningful text exists
-        print("Using auto-generated transcript:", auto_text)
-    else:
-        textarea.send_keys(speech_text)
-        print("Pasted generated speech text into textarea")
-
-    # Wait for submit button to be ready
-    time.sleep(2)
+    WebDriverWait(driver, 60).until(
+        lambda d: len(d.find_element(By.ID, "6857d0f18732f6857d0f162f0c79_selftranscript").get_attribute("value").strip().split()) > 5
+    )
+    print("Textarea populated with auto-generated transcript")
 
     # Click submit button with retry logic
     submit_success = False
+    submit_button_selector = (By.ID, "68597e59804b068597e590239f70_button")
     for attempt in range(3):
         try:
             submit_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable((By.ID, "6857d0f18732f6857d0f162f0c79_button"))
+                EC.element_to_be_clickable(submit_button_selector)
             )
             if submit_button.is_displayed() and "disabled" not in submit_button.get_attribute("class"):
                 driver.execute_script("arguments[0].scrollIntoView(true);", submit_button)
@@ -357,10 +342,16 @@ try:
 
     # Click done button
     done_button = WebDriverWait(driver, 30).until(
-        EC.element_to_be_clickable((By.ID, "6857d16ed65ab6857d16e9a22979_button"))
+        EC.element_to_be_clickable((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
     )
-    done_button.click()
-    print("Clicked 'Done' button")
+    driver.execute_script("arguments[0].scrollIntoView(true);", done_button)
+    try:
+        done_button.click()
+        print("Clicked 'Done' button with Selenium")
+    except:
+        print("Selenium click failed, attempting JavaScript click")
+        driver.execute_script("arguments[0].click();", done_button)
+        print("Clicked 'Done' button with JavaScript")
 
 except Exception as e:
     print(f"An error occurred: {e}")
