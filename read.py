@@ -9,17 +9,31 @@ import sounddevice as sd
 import numpy as np
 import time
 import os
+import google.generativeai as genai
 
-# Simulate Gemini API response (replace with actual Gemini API call)
+# Configure Gemini API (replace with your actual API key)
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"  # Replace with your Gemini API key
+genai.configure(api_key=GEMINI_API_KEY)
+
+# Generate response using Gemini API
 def generate_gemini_response(topic, target_words):
-    response = (
-        f"The {topic.lower()} is a fascinating concept in AI. It evaluates {target_words[0]} to make decisions. "
-        f"The {target_words[1]} determines the {target_words[2]}, reflecting {target_words[3]}. "
-        f"The agent performs an {target_words[4]} to achieve {target_words[5]}. "
-        f"This process {target_words[6]} to quantify the {target_words[7]}. "
-        f"In summary, the {topic.lower()} optimizes decision-making by balancing preferences and outcomes."
-    )
-    return response
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')  # Use appropriate Gemini model
+        prompt = (
+            f"Generate a concise speech (120-150 words) about '{topic}' in the context of AI. "
+            f"Incorporate the following target words naturally: {', '.join(target_words)}. "
+            f"Ensure the response is suitable for text-to-speech at 180 wpm, lasting approximately 40-50 seconds. "
+            f"The tone should be informative and engaging."
+        )
+        response = model.generate_content(prompt)
+        speech_text = response.text.strip()
+        print("Gemini API response:", speech_text)
+        return speech_text
+    except Exception as e:
+        print(f"Error with Gemini API: {e}")
+        # Fallback response in case of API failure
+        fallback = f"The {topic.lower()} is a fascinating AI concept. It involves {', '.join(target_words)} to optimize decision-making."
+        return fallback
 
 # Validate audio devices
 def check_audio_devices():
@@ -41,21 +55,21 @@ def check_audio_devices():
 
 # Test audio routing
 def test_audio_routing(device_name, is_vb_audio):
-    print(f"Testing audio routing with device: {device_name}...")
+    print(f"Testing audio routing with {device_name}...")
     engine = pyttsx3.init()
-    engine.setProperty('rate', 150)
-    engine.say("Testing voice input")
+    engine.setProperty('rate', 180)
+    engine.say("Testing audio routing")
     fs = 44100
-    with sd.InputStream(device=device_name, samplerate=fs, channels=2) as stream:
-        recording = sd.rec(int(2 * fs), samplerate=fs, channels=2, device=device_name)
+    with sd.InputStream(device=device_name, samplerate=fs, channels=1) as stream:
+        recording = sd.rec(int(fs), samplerate=fs, channels=1, device=device_name)
         engine.runAndWait()
         sd.wait()
     max_amplitude = np.max(np.abs(recording))
-    print(f"Test recording max amplitude = {max_amplitude:.4f}")
-    if max_amplitude < 0.001:
-        print(f"Warning: {device_name} test failed - no audio input detected. Check your audio settings.")
+    print(f"Test recording max amplitude: {max_amplitude:.4f}")
+    if max_amplitude < 0.01:
+        print(f"WARNING: Audio routing test failed with {device_name}. No audio detected. Check device settings.")
     else:
-        print("Audio input test passed OK.")
+        print("Audio routing test passed.")
 
 # Initialize pyttsx3
 engine = pyttsx3.init()
@@ -75,10 +89,8 @@ try:
     # Validate audio setup
     audio_device, is_vb_audio = check_audio_devices()
     if not is_vb_audio:
-        print("WARNING: Using physical microphone")
-        test_audio_routing(audio_device, is_vb_audio)
-    else:
-        print("VB-Audio detected; skipping test.")
+        print("WARNING: Using physical microphone. Audio may not route correctly without VB-Audio Cable.")
+    test_audio_routing(audio_device, is_vb_audio)
 
     # Navigate to login page
     driver.get("https://lms2.ai.saveetha.in/login/index.php")
