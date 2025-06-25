@@ -85,8 +85,8 @@ try:
     print("Navigated to login page")
 
     # Enter login credentials
-    username = "23009466"  # Replace with your username
-    password = "1554"  # Replace with your password
+    username = ""  # Replace with your username
+    password = ""  # Replace with your password
     driver.find_element(By.ID, "username").send_keys(username)
     driver.find_element(By.ID, "password").send_keys(password)
 
