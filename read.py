@@ -93,7 +93,7 @@ try:
     test_audio_routing(audio_device, is_vb_audio)
 
     # Navigate to login page
-    driver.get("https://lms2.ai.saveetha.in/login/index.php")
+    driver.get("")
     print("Navigated to login page")
 
     # Enter login credentials
@@ -117,7 +117,7 @@ try:
         raise Exception("Login failed. Check credentials or network.")
 
     # Navigate to initial activity page
-    activity_url = "https://lms2.ai.saveetha.in/mod/solo/attempt/manageattempts.php?id=32323&attemptid=0&stepno=1"
+    activity_url = ""
     driver.get(activity_url)
     print("Navigated to initial activity page")
 
