@@ -93,12 +93,12 @@ try:
     test_audio_routing(audio_device, is_vb_audio)
 
     # Navigate to login page
-    driver.get("")
+    driver.get("https://lms2.ai.saveetha.in/login/index.php")
     print("Navigated to login page")
 
     # Enter login credentials
-    username = ""  # Replace with your username
-    password = ""  # Replace with your password
+    username = "23009466"  # Replace with your username
+    password = "1554"  # Replace with your password
     driver.find_element(By.ID, "username").send_keys(username)
     driver.find_element(By.ID, "password").send_keys(password)
 
@@ -117,7 +117,7 @@ try:
         raise Exception("Login failed. Check credentials or network.")
 
     # Navigate to initial activity page
-    activity_url = ""
+    activity_url = "https://lms2.ai.saveetha.in/mod/solo/attempt/manageattempts.php?id=32323&attemptid=0&stepno=1"
     driver.get(activity_url)
     print("Navigated to initial activity page")
 
@@ -263,7 +263,7 @@ try:
                 driver.switch_to.default_content()
                 print("Searching for stop button in main content")
             
-            stop_button = WebDriverWait(driver, 30).until(
+            stop_button = WebDriverWait(driver, .;until(
                 EC.element_to_be_clickable(stop_button_selector)
             )
             # Ensure button is visible and not disabled
@@ -312,18 +312,28 @@ try:
         driver.execute_script("arguments[0].click();", next_button)
         print("Clicked 'Next' button with JavaScript")
 
-    # Wait for textarea to be populated with text
-    textarea = WebDriverWait(driver, 30).until(
-        EC.presence_of_element_located((By.ID, "6857d0f18732f6857d0f162f0c79_selftranscript"))
+    # Wait for the transcript page to load (check for checkbox)
+    WebDriverWait(driver, 30).until(
+        EC.presence_of_element_located((By.ID, "68615e96ccfef68615e968b78270_dontwaitfortranscript"))
     )
-    WebDriverWait(driver, 60).until(
-        lambda d: len(d.find_element(By.ID, "6857d0f18732f6857d0f162f0c79_selftranscript").get_attribute("value").strip().split()) > 5
+    print("Transcript page loaded")
+
+    # Click the "I do not want to wait for the transcript" checkbox
+    checkbox = WebDriverWait(driver, 30).until(
+        EC.element_to_be_clickable((By.ID, "68615e96ccfef68615e968b78270_dontwaitfortranscript"))
     )
-    print("Textarea populated with auto-generated transcript")
+    driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
+    try:
+        checkbox.click()
+        print("Clicked 'I do not want to wait for the transcript' checkbox with Selenium")
+    except:
+        print("Selenium click failed, attempting JavaScript click")
+        driver.execute_script("arguments[0].click();", checkbox)
+        print("Clicked 'I do not want to wait for the transcript' checkbox with JavaScript")
 
     # Click submit button with retry logic
     submit_success = False
-    submit_button_selector = (By.ID, "68597e59804b068597e590239f70_button")
+    submit_button_selector = (By.ID, "68615e96 semejef68615e968b78270_button")
     for attempt in range(3):
         try:
             submit_button = WebDriverWait(driver, 30).until(
@@ -351,6 +361,12 @@ try:
     
     if not submit_success:
         raise Exception("Failed to click 'Submit' button after retries")
+
+    # Wait for the Done button to appear after Submit
+    WebDriverWait(driver, 30).until(
+        EC.presence_of_element_located((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
+    )
+    print("Done button appeared")
 
     # Click done button
     done_button = WebDriverWait(driver, 30).until(
