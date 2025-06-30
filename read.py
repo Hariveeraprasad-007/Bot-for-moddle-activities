@@ -12,7 +12,7 @@ import os
 import google.generativeai as genai
 
 # Configure Gemini API (replace with your actual API key)
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"  # Replace with your Gemini API key
+GEMINI_API_KEY = ""  # Replace with your Gemini API key
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Generate response using Gemini API
@@ -97,8 +97,8 @@ try:
     print("Navigated to login page")
 
     # Enter login credentials
-    username = "23009466"  # Replace with your username
-    password = "1554"  # Replace with your password
+    username = ""  # Replace with your username
+    password = ""  # Replace with your password
     driver.find_element(By.ID, "username").send_keys(username)
     driver.find_element(By.ID, "password").send_keys(password)
 
@@ -263,7 +263,7 @@ try:
                 driver.switch_to.default_content()
                 print("Searching for stop button in main content")
             
-            stop_button = WebDriverWait(driver, .;until(
+            stop_button = WebDriverWait(driver, 30).until(
                 EC.element_to_be_clickable(stop_button_selector)
             )
             # Ensure button is visible and not disabled
@@ -312,16 +312,25 @@ try:
         driver.execute_script("arguments[0].click();", next_button)
         print("Clicked 'Next' button with JavaScript")
 
+    # Save page source for debugging before attempting to find checkbox
+    with open("transcript_page_source.html", "w", encoding="utf-8") as f:
+        f.write(driver.page_source)
+    print("Saved transcript page source to 'transcript_page_source.html'")
+
     # Wait for the transcript page to load (check for checkbox)
-    WebDriverWait(driver, 30).until(
-        EC.presence_of_element_located((By.ID, "68615e96ccfef68615e968b78270_dontwaitfortranscript"))
-    )
-    print("Transcript page loaded")
+    try:
+        checkbox = WebDriverWait(driver, 60).until(
+            EC.element_to_be_clickable((By.XPATH, "//input[@type='checkbox' and @id[contains(., 'dontwaitfortranscript')]]"))
+        )
+        print("Transcript page loaded, checkbox found")
+    except:
+        print("Checkbox not found by ID, trying text-based XPath")
+        checkbox = WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.XPATH, "//label[contains(text(), 'I do not want to wait for the transcript')]/preceding-sibling::input[@type='checkbox']"))
+        )
+        print("Checkbox found using text-based XPath")
 
     # Click the "I do not want to wait for the transcript" checkbox
-    checkbox = WebDriverWait(driver, 30).until(
-        EC.element_to_be_clickable((By.ID, "68615e96ccfef68615e968b78270_dontwaitfortranscript"))
-    )
     driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
     try:
         checkbox.click()
@@ -331,9 +340,32 @@ try:
         driver.execute_script("arguments[0].click();", checkbox)
         print("Clicked 'I do not want to wait for the transcript' checkbox with JavaScript")
 
+    # Paste the generated speech text into the textarea
+    try:
+        textarea = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, "68615e96ccfef68615e968b78270_selftranscript"))
+        )
+        print("Textarea found by ID")
+    except:
+        print("Textarea not found by ID, trying XPath")
+        textarea = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "//textarea[@id[contains(., 'selftranscript')]]"))
+        )
+        print("Textarea found using XPath")
+
+    driver.execute_script("arguments[0].scrollIntoView(true);", textarea)
+    try:
+        textarea.clear()  # Clear any existing text
+        textarea.send_keys(speech_text)
+        print("Pasted generated speech text into textarea")
+    except Exception as e:
+        print(f"Failed to paste text into textarea: {e}")
+        driver.execute_script("arguments[0].value = arguments[1];", textarea, speech_text)
+        print("Pasted text into textarea using JavaScript")
+
     # Click submit button with retry logic
     submit_success = False
-    submit_button_selector = (By.ID, "68615e96 semejef68615e968b78270_button")
+    submit_button_selector = (By.XPATH, "//button[@class='btn' and text()='Submit']")
     for attempt in range(3):
         try:
             submit_button = WebDriverWait(driver, 30).until(
@@ -363,15 +395,28 @@ try:
         raise Exception("Failed to click 'Submit' button after retries")
 
     # Wait for the Done button to appear after Submit
-    WebDriverWait(driver, 30).until(
-        EC.presence_of_element_located((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
-    )
-    print("Done button appeared")
+    try:
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
+        )
+        print("Done button appeared")
+    except:
+        print("Done button not found by ID, trying text-based XPath")
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "//button[@class='btn' and text()='Done']"))
+        )
+        print("Done button found using text-based XPath")
 
     # Click done button
-    done_button = WebDriverWait(driver, 30).until(
-        EC.element_to_be_clickable((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
-    )
+    try:
+        done_button = WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
+        )
+    except:
+        print("Done button not clickable by ID, trying text-based XPath")
+        done_button = WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Done']"))
+        )
     driver.execute_script("arguments[0].scrollIntoView(true);", done_button)
     try:
         done_button.click()
