@@ -11,19 +11,19 @@ import time
 import os
 import google.generativeai as genai
 
-# Configure Gemini API (replace with your actual API key)
+# Configure Gemini API
 GEMINI_API_KEY = ""  # Replace with your Gemini API key
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Generate response using Gemini API
 def generate_gemini_response(topic, target_words):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')  # Use appropriate Gemini model
+        model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = (
-            f"Generate a concise speech (120-150 words) about '{topic}' in the context of AI. "
-            f"Incorporate the following target words naturally: {', '.join(target_words)}. "
-            f"Ensure the response is suitable for text-to-speech at 180 wpm, lasting approximately 40-50 seconds. "
-            f"The tone should be informative and engaging."
+            f"Generate a concise speech (100-120 words) about '{topic}' in the context of AI. "
+            f"Incorporate these target words naturally: {', '.join(target_words)}. "
+            f"Ensure suitability for text-to-speech at 200 wpm, lasting 30-40 seconds. "
+            f"Use an informative and engaging tone."
         )
         response = model.generate_content(prompt)
         speech_text = response.text.strip()
@@ -31,8 +31,7 @@ def generate_gemini_response(topic, target_words):
         return speech_text
     except Exception as e:
         print(f"Error with Gemini API: {e}")
-        # Fallback response in case of API failure
-        fallback = f"The {topic.lower()} is a fascinating AI concept. It involves {', '.join(target_words)} to optimize decision-making."
+        fallback = f"The {topic.lower()} is a key AI concept using {', '.join(target_words)} for decision-making."
         return fallback
 
 # Validate audio devices
@@ -40,24 +39,23 @@ def check_audio_devices():
     devices = sd.query_devices()
     print("Available audio devices:")
     for i, device in enumerate(devices):
-        print(f"{i}: {device['name']}, Input Channels: {device['max_input_channels']}, Output Channels: {device['max_output_channels']}")
-    vb_audio = [d for d in devices if "vb-audio" in d['name'].lower() or "cable" in d['name'].lower()]
+        print(f"{i}: {device['name']}, Input: {device['max_input_channels']}, Output: {device['max_output_channels']}")
+    vb_audio = next((d for d in devices if "vb-audio" in d['name'].lower() or "cable" in d['name'].lower()), None)
     if vb_audio:
-        print("VB-Audio Cable detected:", vb_audio[0]['name'])
-        return vb_audio[0]['name'], True
-    else:
-        print("WARNING: VB-Audio Cable not found. Using default microphone.")
-        mic = [d for d in devices if d['max_input_channels'] > 0 and "intel" in d['name'].lower()]
-        if mic:
-            print("Using fallback microphone:", mic[0]['name'])
-            return mic[0]['name'], False
-        raise Exception("No suitable input device found. Install VB-Audio Cable or ensure a microphone is available.")
+        print("VB-Audio Cable detected:", vb_audio['name'])
+        return vb_audio['name'], True
+    print("WARNING: VB-Audio Cable not found. Using default microphone.")
+    mic = next((d for d in devices if d['max_input_channels'] > 0 and "intel" in d['name'].lower()), None)
+    if mic:
+        print("Using fallback microphone:", mic['name'])
+        return mic['name'], False
+    raise Exception("No suitable input device found. Install VB-Audio Cable or ensure a microphone is available.")
 
 # Test audio routing
 def test_audio_routing(device_name, is_vb_audio):
     print(f"Testing audio routing with {device_name}...")
     engine = pyttsx3.init()
-    engine.setProperty('rate', 180)
+    engine.setProperty('rate', 200)
     engine.say("Testing audio routing")
     fs = 44100
     with sd.InputStream(device=device_name, samplerate=fs, channels=1) as stream:
@@ -67,30 +65,28 @@ def test_audio_routing(device_name, is_vb_audio):
     max_amplitude = np.max(np.abs(recording))
     print(f"Test recording max amplitude: {max_amplitude:.4f}")
     if max_amplitude < 0.01:
-        print(f"WARNING: Audio routing test failed with {device_name}. No audio detected. Check device settings.")
+        print(f"WARNING: Audio routing test failed with {device_name}. Check device settings.")
     else:
         print("Audio routing test passed.")
-
-# Initialize pyttsx3
-engine = pyttsx3.init()
-engine.setProperty('rate', 180)  # 180 wpm for ~40–50s on 120–150 words
-engine.setProperty('volume', 0.9)
+    return engine
 
 # Initialize Chrome WebDriver
 options = Options()
 options.add_argument("--start-maximized")
-options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--use-fake-ui-for-media-stream")
 options.add_argument("--disable-notifications")
 driver = webdriver.Chrome(options=options)
+engine = None
 
 try:
     # Validate audio setup
     audio_device, is_vb_audio = check_audio_devices()
     if not is_vb_audio:
         print("WARNING: Using physical microphone. Audio may not route correctly without VB-Audio Cable.")
-    test_audio_routing(audio_device, is_vb_audio)
+    engine = test_audio_routing(audio_device, is_vb_audio)
+    engine.setProperty('rate', 200)  # 200 wpm for ~30-40s on 100-120 words
+    engine.setProperty('volume', 0.9)
 
     # Navigate to login page
     driver.get("https://lms2.ai.saveetha.in/login/index.php")
@@ -110,52 +106,34 @@ try:
     print("Clicked login button")
 
     # Verify login
-    try:
-        WebDriverWait(driver, 10).until(EC.url_contains("saveetha.in"))
-        print("Login successful")
-    except:
-        raise Exception("Login failed. Check credentials or network.")
+    WebDriverWait(driver, 10).until(EC.url_contains("saveetha.in"))
+    print("Login successful")
 
     # Navigate to initial activity page
-    activity_url = "https://lms2.ai.saveetha.in/mod/solo/attempt/manageattempts.php?id=32323&attemptid=0&stepno=1"
-    driver.get(activity_url)
+    driver.get("https://lms2.ai.saveetha.in/mod/solo/attempt/manageattempts.php?id=32323&attemptid=0&stepno=1")
     print("Navigated to initial activity page")
 
     # Handle 503 errors
-    retries = 5
-    for attempt in range(retries):
+    for attempt in range(5):
         try:
-            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
             break
         except:
-            if attempt < retries - 1:
+            if attempt < 4:
                 print("Retrying due to page load issue...")
-                time.sleep(5)
                 driver.refresh()
             else:
                 raise Exception("Failed to load page after retries")
 
-    # Click start button to navigate to next page
-    start_button = None
-    try:
-        start_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.ID, "68568c7dad64b68568c7d75c4d70_button"))
-        )
-    except:
-        start_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Start']"))
-        )
-    driver.execute_script("arguments[0].scrollIntoView(true);", start_button)
-    try:
-        start_button.click()
-        print("Clicked 'Start' button with Selenium")
-    except:
-        print("Selenium click failed, attempting JavaScript click")
-        driver.execute_script("arguments[0].click();", start_button)
-        print("Clicked 'Start' button with JavaScript")
+    # Click start button
+    start_button = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Start']"))
+    )
+    driver.execute_script("arguments[0].click();", start_button)
+    print("Clicked 'Start' button")
 
-    # Wait for navigation to new page (check for topic or recording button)
-    WebDriverWait(driver, 30).until(
+    # Wait for recording page
+    WebDriverWait(driver, 20).until(
         EC.any_of(
             EC.presence_of_element_located((By.CLASS_NAME, "mod_solo_speakingtopic_readonly")),
             EC.presence_of_element_located((By.CLASS_NAME, "poodll_mediarecorder_minimal_start_button"))
@@ -164,20 +142,16 @@ try:
     print("Navigated to recording page")
 
     # Extract topic
-    topic_element = WebDriverWait(driver, 30).until(
+    topic_element = WebDriverWait(driver, 20).until(
         EC.presence_of_element_located((By.CLASS_NAME, "mod_solo_speakingtopic_readonly"))
     )
     topic = topic_element.text.strip()
     print("Extracted topic:", topic)
 
-    # Wait briefly to ensure DOM stability
-    time.sleep(2)
-
-    # Extract target words with a fresh lookup
-    target_word_elements = WebDriverWait(driver, 30).until(
+    # Extract target words
+    target_words = [elem.text.strip() for elem in WebDriverWait(driver, 20).until(
         EC.presence_of_all_elements_located((By.CLASS_NAME, "mod_solo_targetwordtag"))
-    )
-    target_words = [elem.text.strip() for elem in target_word_elements]
+    )]
     print("Extracted target words:", target_words)
 
     # Generate response with Gemini
@@ -186,245 +160,135 @@ try:
 
     # Check for iframes
     def switch_to_iframe_with_element(selector):
-        iframes = driver.find_elements(By.TAG_NAME, "iframe")
-        if not iframes:
-            print("No iframes found")
-            return False
-        for i, iframe in enumerate(iframes):
+        for i, iframe in enumerate(driver.find_elements(By.TAG_NAME, "iframe")):
             try:
                 driver.switch_to.frame(iframe)
+                WebDriverWait(driver, 3).until(EC.presence_of_element_located(selector))
                 print(f"Switched to iframe {i}")
-                WebDriverWait(driver, 5).until(EC.presence_of_element_located(selector))
                 return True
             except:
-                print(f"Element not found in iframe {i}, switching back")
                 driver.switch_to.default_content()
+        print("No iframe with element found")
         return False
 
     # Click record button
-    record_success = False
     record_button_selector = (By.CLASS_NAME, "poodll_mediarecorder_minimal_start_button")
-    for attempt in range(3):
-        try:
-            if switch_to_iframe_with_element(record_button_selector):
-                print("Found record button in iframe")
-            else:
-                driver.switch_to.default_content()
-                print("Searching for record button in main content")
-            
-            record_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable(record_button_selector)
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", record_button)
-            try:
-                record_button.click()
-                print("Clicked 'Record' button with Selenium")
-            except:
-                print("Selenium click failed, attempting JavaScript click")
-                driver.execute_script("arguments[0].click();", record_button)
-                print("Clicked 'Record' button with JavaScript")
-            time.sleep(1)  # Wait for PoodLL initialization
-            record_success = True
-            break
-        except Exception as e:
-            print(f"Record attempt {attempt + 1} failed: {e}")
-            driver.switch_to.default_content()
-            time.sleep(2)
-    
-    if not record_success:
-        raise Exception("Failed to click 'Record' button after retries")
+    if switch_to_iframe_with_element(record_button_selector):
+        print("Found record button in iframe")
+    else:
+        driver.switch_to.default_content()
+        print("Searching for record button in main content")
+    record_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable(record_button_selector))
+    driver.execute_script("arguments[0].click();", record_button)
+    print("Clicked 'Record' button")
 
     # Handle JavaScript alert
     try:
         WebDriverWait(driver, 3).until(EC.alert_is_present())
-        alert = Alert(driver)
-        alert.accept()
+        Alert(driver).accept()
         print("Accepted JavaScript microphone alert")
     except:
-        print("No JavaScript alert found, continuing...")
+        print("No JavaScript alert found")
 
     # Speak text
-    print("Speaking text directly...")
+    print("Speaking text...")
     start_time = time.time()
     engine.say(speech_text)
     engine.runAndWait()
-    elapsed_time = time.time() - start_time
-    print(f"Finished speaking in {elapsed_time:.2f} seconds")
+    print(f"Finished speaking in {time.time() - start_time:.2f} seconds")
 
-    # Click stop button with retry logic
+    # Click stop button
     driver.switch_to.default_content()
     stop_button_selector = (By.CLASS_NAME, "poodll_mediarecorder_minimal_stop_button")
-    stop_success = False
-    for attempt in range(3):
-        try:
-            if switch_to_iframe_with_element(stop_button_selector):
-                print("Found stop button in iframe")
-            else:
-                driver.switch_to.default_content()
-                print("Searching for stop button in main content")
-            
-            stop_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable(stop_button_selector)
-            )
-            # Ensure button is visible and not disabled
-            if "disabled" not in stop_button.get_attribute("class") and stop_button.is_displayed():
-                driver.execute_script("arguments[0].scrollIntoView(true);", stop_button)
-                time.sleep(2)  # Wait for animation/state change
-                try:
-                    stop_button.click()
-                    print("Clicked 'Stop' button with Selenium")
-                    stop_success = True
-                    break
-                except:
-                    print("Selenium click failed, attempting JavaScript click")
-                    driver.execute_script("arguments[0].click();", stop_button)
-                    print("Clicked 'Stop' button with JavaScript")
-                    stop_success = True
-                    break
-            else:
-                print(f"Stop button attempt {attempt + 1} not interactable, retrying...")
-                time.sleep(2)
-        except Exception as e:
-            print(f"Stop button attempt {attempt + 1} failed: {e}")
-            driver.switch_to.default_content()
-            time.sleep(2)
-    
-    if not stop_success:
-        raise Exception("Failed to click 'Stop' button after retries")
+    if switch_to_iframe_with_element(stop_button_selector):
+        print("Found stop button in iframe")
+    else:
+        driver.switch_to.default_content()
+        print("Searching for stop button in main content")
+    stop_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable(stop_button_selector))
+    driver.execute_script("arguments[0].click();", stop_button)
+    print("Clicked 'Stop' button")
 
-    # Click next button with wait
-    driver.switch_to.default_content()
-    next_button = None
-    try:
-        next_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.ID, "6857cec0497296857cec0110d680_button"))
-        )
-    except:
-        next_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Next']"))
-        )
-    driver.execute_script("arguments[0].scrollIntoView(true);", next_button)
-    try:
-        next_button.click()
-        print("Clicked 'Next' button with Selenium")
-    except:
-        print("Selenium click failed, attempting JavaScript click")
-        driver.execute_script("arguments[0].click();", next_button)
-        print("Clicked 'Next' button with JavaScript")
+    # Click next button
+    next_button = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Next']"))
+    )
+    driver.execute_script("arguments[0].click();", next_button)
+    print("Clicked 'Next' button")
 
-    # Save page source for debugging before attempting to find checkbox
+    # Save page source for debugging
     with open("transcript_page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
     print("Saved transcript page source to 'transcript_page_source.html'")
 
-    # Wait for the transcript page to load (check for checkbox)
+    # Wait for transcript page
+    WebDriverWait(driver, 30).until(
+        EC.any_of(
+            EC.presence_of_element_located((By.XPATH, "//input[@type='checkbox' and @id[contains(., 'dontwaitfortranscript')]]")),
+            EC.presence_of_element_located((By.XPATH, "//textarea[@id[contains(., 'selftranscript')]]"))
+        )
+    )
+    print("Transcript page loaded")
+
+    # Click checkbox
     try:
-        checkbox = WebDriverWait(driver, 60).until(
+        checkbox = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//input[@type='checkbox' and @id[contains(., 'dontwaitfortranscript')]]"))
         )
-        print("Transcript page loaded, checkbox found")
+        print("Checkbox found by ID")
     except:
-        print("Checkbox not found by ID, trying text-based XPath")
-        checkbox = WebDriverWait(driver, 30).until(
+        checkbox = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//label[contains(text(), 'I do not want to wait for the transcript')]/preceding-sibling::input[@type='checkbox']"))
         )
         print("Checkbox found using text-based XPath")
+    driver.execute_script("arguments[0].click();", checkbox)
+    print("Clicked 'I do not want to wait for the transcript' checkbox")
 
-    # Click the "I do not want to wait for the transcript" checkbox
-    driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
+    # Paste text into textarea
     try:
-        checkbox.click()
-        print("Clicked 'I do not want to wait for the transcript' checkbox with Selenium")
-    except:
-        print("Selenium click failed, attempting JavaScript click")
-        driver.execute_script("arguments[0].click();", checkbox)
-        print("Clicked 'I do not want to wait for the transcript' checkbox with JavaScript")
-
-    # Paste the generated speech text into the textarea
-    try:
-        textarea = WebDriverWait(driver, 30).until(
+        textarea = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "68615e96ccfef68615e968b78270_selftranscript"))
         )
         print("Textarea found by ID")
     except:
-        print("Textarea not found by ID, trying XPath")
-        textarea = WebDriverWait(driver, 30).until(
+        textarea = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//textarea[@id[contains(., 'selftranscript')]]"))
         )
         print("Textarea found using XPath")
+    driver.execute_script("arguments[0].value = arguments[1];", textarea, speech_text)
+    print("Pasted text into textarea")
 
-    driver.execute_script("arguments[0].scrollIntoView(true);", textarea)
+    # Click submit button
+    submit_button = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Submit']"))
+    )
+    driver.execute_script("arguments[0].click();", submit_button)
+    print("Clicked 'Submit' button")
+
+    # Wait for Done button
     try:
-        textarea.clear()  # Clear any existing text
-        textarea.send_keys(speech_text)
-        print("Pasted generated speech text into textarea")
-    except Exception as e:
-        print(f"Failed to paste text into textarea: {e}")
-        driver.execute_script("arguments[0].value = arguments[1];", textarea, speech_text)
-        print("Pasted text into textarea using JavaScript")
-
-    # Click submit button with retry logic
-    submit_success = False
-    submit_button_selector = (By.XPATH, "//button[@class='btn' and text()='Submit']")
-    for attempt in range(3):
-        try:
-            submit_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable(submit_button_selector)
-            )
-            if submit_button.is_displayed() and "disabled" not in submit_button.get_attribute("class"):
-                driver.execute_script("arguments[0].scrollIntoView(true);", submit_button)
-                try:
-                    submit_button.click()
-                    print("Clicked 'Submit' button with Selenium")
-                    submit_success = True
-                    break
-                except:
-                    print("Selenium click failed, attempting JavaScript click")
-                    driver.execute_script("arguments[0].click();", submit_button)
-                    print("Clicked 'Submit' button with JavaScript")
-                    submit_success = True
-                    break
-            else:
-                print(f"Submit button attempt {attempt + 1} not interactable, retrying...")
-                time.sleep(2)
-        except Exception as e:
-            print(f"Submit button attempt {attempt + 1} failed: {e}")
-            time.sleep(2)
-    
-    if not submit_success:
-        raise Exception("Failed to click 'Submit' button after retries")
-
-    # Wait for the Done button to appear after Submit
-    try:
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.XPATH, "//button[@class='btn' and text()='Done']"))
         )
         print("Done button appeared")
     except:
-        print("Done button not found by ID, trying text-based XPath")
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.XPATH, "//button[@class='btn' and text()='Done']"))
+        print("Done button not found, trying ID")
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
         )
-        print("Done button found using text-based XPath")
+        print("Done button found by ID")
 
     # Click done button
     try:
-        done_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
-        )
-    except:
-        print("Done button not clickable by ID, trying text-based XPath")
-        done_button = WebDriverWait(driver, 30).until(
+        done_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, "//button[@class='btn' and text()='Done']"))
         )
-    driver.execute_script("arguments[0].scrollIntoView(true);", done_button)
-    try:
-        done_button.click()
-        print("Clicked 'Done' button with Selenium")
     except:
-        print("Selenium click failed, attempting JavaScript click")
-        driver.execute_script("arguments[0].click();", done_button)
-        print("Clicked 'Done' button with JavaScript")
+        done_button = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.ID, "68597ef3ee4d968597ef27bf6f70_button"))
+        )
+    driver.execute_script("arguments[0].click();", done_button)
+    print("Clicked 'Done' button")
 
 except Exception as e:
     print(f"An error occurred: {e}")
@@ -434,7 +298,7 @@ except Exception as e:
     print("Saved page source to 'page_source.html' and screenshot to 'error_screenshot.png'")
 
 finally:
-    # Clean up
-    time.sleep(2)
+    if engine:
+        engine.stop()
     driver.quit()
     print("Browser closed")
