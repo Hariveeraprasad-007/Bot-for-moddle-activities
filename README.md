@@ -1,134 +1,130 @@
+# 🤖 Bot for Moodle Activities (Saveetha LMS Automation)
 
-🤖 Bot for Moodle Activities (Saveetha LMS Automation)
-This project is a smart automation bot built using Python, Selenium, and Google Gemini AI. It automates various routine activities on Saveetha Moodle LMS  such as quizzes, SOLO speaking tasks, and read-aloud exercises.
+This project is a **smart automation bot** built using Python, Selenium, and Google Gemini AI. It automates various routine activities on **Saveetha Moodle LMS** such as quizzes, SOLO speaking tasks, and read-aloud exercises.
 
 Instead of manually doing repetitive LMS work, the bot does everything for you — faster, smarter, and with the help of AI.
 
-🧩 Activities Automated by the Bot
-1. 🎯 Quiz Automation (quiz_automator.py)
-Logs into your LMS account.
+---
 
-Opens quizzes one by one.
+## 🧩 Activities Automated by the Bot
 
-Uses Gemini AI to read and understand each question.
+### 🎯 1. Quiz Automation (`quiz_automator.py`)
 
-Automatically selects the most suitable answer.
+- Logs into your LMS account using your credentials.
+- Opens quizzes one by one and reads the questions.
+- Uses **Google Gemini AI** to understand and select the correct answers.
+- Automatically clicks the correct options and submits the quiz.
+- Supports **target scores** — the bot can retry until the desired score is achieved.
+- Comes with a **GUI interface** — no code editing needed.
 
-Submits the quiz.
+> ✅ Saves hours when you have multiple quizzes to complete.
 
-If a target score is set, it will retry until it reaches that score.
+---
 
-Comes with a GUI interface — no coding needed to run it.
+### 🗣️ 2. SOLO Speaking Task Automation (`read.py`)
 
-✅ Saves hours when you have lots of quizzes to complete.
+- Logs into Moodle and opens the SOLO speaking activity.
+- Extracts the **topic** and **target words**.
+- Uses **Gemini AI** to generate a meaningful short speech (100–120 words).
+- Uses a text-to-speech engine (`pyttsx3`) to speak the response.
+- Records the audio using **VB-Audio Cable**.
+- Submits the audio and transcript automatically.
 
-2. 🗣️ SOLO Speaking Task Automation (read.py)
-Logs into Moodle and opens the SOLO speaking activity.
+> 🎓 Saves your voice and effort while delivering high-quality, AI-generated responses.
 
-Extracts the topic and target words.
+---
 
-Uses Gemini AI to generate a meaningful short speech (100–120 words).
+### 📖 3. Read Aloud Task Automation (`readaloud.py`)
 
-Uses a text-to-speech engine (pyttsx3) to speak the response aloud.
+- Logs into Moodle and opens the “Read Aloud” activity.
+- Extracts the passage you need to read.
+- Converts the passage into human-like speech using TTS.
+- Starts and stops the recording automatically.
+- Submits the activity.
 
-Records the spoken text using VB-Audio Cable.
+> 🧑‍🎓 Perfect for completing read-alouds in noisy or busy environments.
 
-Submits the audio and transcript automatically.
+---
 
-🎓 Saves your voice and effort while delivering high-quality, AI-generated content.
+## 🎙️ How to Use VB-Audio Cable (for `read.py` and `readaloud.py`)
 
-3. 📖 Read Aloud Task Automation (readaloud.py)
-Logs into Moodle and opens the “Read Aloud” activity.
+### 🔧 What is VB-Audio Cable?
 
-Extracts the passage you need to read.
+**VB-Audio Cable** is a virtual audio device that allows your system’s speaker output (AI-generated voice) to be used as microphone input — essential for automating speaking tasks on Moodle.
 
-Speaks it out loud using AI voice (Text-to-Speech).
+### ✅ Installation Steps
 
-Starts and stops the recording automatically.
+1. Download from: [https://vb-audio.com/Cable/](https://vb-audio.com/Cable/)
+2. Extract the ZIP file.
+3. Run `VBCABLE_Setup.exe` or `VBCABLE_Setup_x64.exe` as Administrator.
+4. Click **Install Driver**.
+5. Restart your system.
 
-Submits the task.
+### 🎤 Set as Default Microphone
 
-🧑‍🎓 Perfect for completing read-alouds, even if you're in a noisy environment or feeling tired.
+- Go to `Control Panel → Sound → Recording tab`.
+- Set **VB-Audio Cable** as your **default microphone**.
+- Keep your regular speakers as the default playback device.
 
-🎙️ How to Use VB-Audio Cable (For read.py & readaloud.py)
-To complete speaking tasks, the bot must record AI-generated speech into Moodle's microphone-based recorder. This is done using VB-Audio Cable, which acts like a virtual mic.
+Now when the bot speaks using TTS, Moodle will think you’re speaking through a mic!
 
-🔧 What is VB-Audio Cable?
-It's a tool that allows your system’s speaker output (TTS voice) to be used as microphone input — essential for automated recording.
+### 🧪 Built-in Audio Test
 
-✅ Steps to Install
-Download from: https://vb-audio.com/Cable/
+Both `read.py` and `readaloud.py`:
+- Automatically detect VB-Audio Cable.
+- Test the audio routing.
+- Warn and fall back to your physical mic if VB is not available.
 
-Extract and install it as Administrator.
+---
 
-Restart your system.
+## 💡 Why I Built This Project
 
-🎤 Set as Default Microphone
-Go to Control Panel → Sound → Recording tab.
+> **Main Goal:** Save time and use that time for **upskilling**.
 
-Set VB-Audio Cable as the default microphone.
-
-Now, when the bot plays speech, Moodle will think you’re speaking!
-
-🧪 Built-in Check
-Both read.py and readaloud.py:
-
-Check if VB-Audio Cable is installed.
-
-Test audio routing automatically.
-
-Fall back to your physical mic (with a warning) if VB-Cable is not available.
-
-💡 Why I Built This Project
-Main Goal: Save time and use that time for upskilling.
-
-Instead of spending hours doing the same LMS tasks — which students often complete with ChatGPT or other tools anyway — I built a smart bot to automate everything using Python and AI.
+Instead of spending hours doing LMS tasks — which many students already use ChatGPT or Gemini for — I built this bot to **automate it smartly** and learn real-world tech skills.
 
 This helped me:
+- Complete tasks efficiently.
+- Learn Selenium, AI API usage, and GUI programming.
+- Build a strong personal project for my portfolio.
 
-Complete my tasks efficiently.
+---
 
-Learn real-world skills (Selenium, Gemini API, GUI in Python).
+## 🙏 My Honest Intent
 
-Build a meaningful personal project.
+This bot was created:
+- ✅ For personal use and learning purposes.
+- ✅ To reduce repetitive effort and focus more on skill development.
+- ✅ As a self-made tech project — **not for breaking rules**.
 
-🙏 My Honest Intent
-This project is built:
+> ⚠️ I want to clearly state:
+- I **respect my college** and its systems.
+- This project is **not built to harm, cheat, or bypass** any academic responsibilities.
+- It is meant to automate **already AI-assisted work**, using smart methods.
 
-✅ For personal productivity and learning.
+---
 
-✅ To reduce repetitive effort and invest that time in learning new things.
+## 👨‍💻 Who Can Use This?
 
-✅ As a showcase project — not to break any academic rules.
+- Students at **Saveetha University** using LMS (AI, CSE, EEE).
+- Anyone who already uses AI tools for LMS tasks.
+- Developers learning Selenium, automation, and Gemini API.
+- People looking to save time and upskill faster.
 
-⚠️ I want to make it very clear:
+---
 
-I respect my college and its systems.
+## 🏁 Final Note
 
-I am not doing this against the college.
-
-This bot is only used for my own tasks, and not for misuse.
-
-I’ve just built a tool to help me work smarter, not to cheat or bypass learning.
-
-👨‍💻 Who Can Use This?
-Saveetha University students on LMS (AI / CSE / EEE).
-
-Students who use AI tools like ChatGPT or Gemini already.
-
-Anyone who wants to explore Python, automation, and real-world AI integration.
-
-Developers looking for a project that combines AI + Selenium + TTS.
-
-🏁 Final Note
 If you're someone who:
 
-Wants to save time ⏳
+- ⏳ Wants to save time  
+- 💪 Believes in upskilling daily  
+- 🧠 Uses AI smartly and responsibly  
+- 🚀 Loves building useful projects  
 
-Believes in upskilling daily 💪
+Then this bot is something you'll find **powerful and inspiring**.
 
-Uses AI smartly and responsibly 🧠
+---
 
-Loves building cool projects 🚀
+> Feel free to star ⭐ the repo if this project helped you — and fork it to build your own!
 
-Then you’ll find this project useful and inspiring.
