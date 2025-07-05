@@ -4,8 +4,6 @@ import threading
 import time
 import os
 import re
-import numpy as np
-import sounddevice as sd
 import pyttsx3
 import requests
 from bs4 import BeautifulSoup
@@ -31,38 +29,16 @@ ACTIVITY_TYPES = ["Speech Submission", "Read-Aloud", "Quiz Automation"]
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 # --- Utility Functions ---
-def check_audio_devices(logger):
-    devices = sd.query_devices()
-    logger(f"Available audio devices:")
-    for i, device in enumerate(devices):
-        logger(f"{i}: {device['name']}, Input: {device['max_input_channels']}, Output: {device['max_output_channels']}")
-    vb_audio = next((d for d in devices if "CABLE" in d['name'].upper()), None)
-    if vb_audio:
-        logger(f"VB-Audio Cable detected: {vb_audio['name']}")
-        return vb_audio['name'], True
-    logger("WARNING: VB-Audio Cable not found. Using default microphone.")
-    mic = next((d for d in devices if d['max_input_channels'] > 0 and "Intel" in d['name']), None)
-    if mic:
-        logger(f"Using fallback microphone: {mic['name']}")
-        return mic['name'], False
-    raise Exception("No suitable input device found. Install VB-Audio Cable or ensure a microphone is available.")
-
-def test_audio_routing(device_name, is_vb_audio, logger):
-    logger(f"Testing audio routing with {device_name}...")
-    engine = pyttsx3.init()
-    engine.setProperty('rate', 200)
-    engine.say("Testing audio routing")
-    fs = 44100
-    with sd.InputStream(device=device_name, samplerate=fs, channels=1) as stream:
-        recording = sd.rec(int(3 * fs), samplerate=fs, channels=1, device=device_name)
-        engine.runAndWait()
-        sd.wait()
-    max_amplitude = np.max(np.abs(recording))
-    logger(f"Test recording max amplitude: {max_amplitude:.4f}")
-    if max_amplitude < 0.01:
-        raise Exception(f"Audio routing test failed with {device_name}. No audio detected.")
-    logger("Audio routing test passed.")
-    return engine
+def initialize_tts(logger):
+    try:
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 200)  # 200 wpm for ~30-40s on 100-120 words
+        engine.setProperty('volume', 0.9)
+        logger("Text-to-speech engine initialized.")
+        return engine
+    except Exception as e:
+        logger(f"Failed to initialize pyttsx3: {e}", "error")
+        raise Exception("Text-to-speech initialization failed.")
 
 def setup_selenium(headless, logger):
     logger("Initializing Chrome WebDriver...")
@@ -110,7 +86,8 @@ def login(driver, wait, username, password, login_url, logger):
             return True
         wait.until(EC.visibility_of_element_located((By.ID, "username"))).send_keys(username)
         wait.until(EC.visibility_of_element_located((By.ID, "password"))).send_keys(password)
-        wait.until(EC.element_to_be_clickable((By.ID, "loginbtn"))).click()
+        login_button = wait.until(EC.element_to_be_clickable((By.ID, "loginbtn")))
+        driver.execute_script("arguments[0].click();", login_button)
         logger("Login button clicked.")
         wait.until(EC.url_changes(login_url))
         if "login" in driver.current_url.lower():
@@ -162,10 +139,8 @@ def ask_gemini(question, options, api_key, logger):
         return ""
 
 # --- Activity Functions ---
-def speech_submission(driver, wait, activity_url, api_key, audio_device, is_vb_audio, logger):
-    engine = test_audio_routing(audio_device, is_vb_audio, logger)
-    engine.setProperty('rate', 200)
-    engine.setProperty('volume', 0.9)
+def speech_submission(driver, wait, activity_url, api_key, logger):
+    engine = initialize_tts(logger)
     try:
         if not navigate_with_retry(driver, wait, activity_url, logger=logger):
             raise Exception("Failed to load activity page.")
@@ -211,7 +186,7 @@ def speech_submission(driver, wait, activity_url, api_key, audio_device, is_vb_a
                 try:
                     driver.switch_to.frame(iframe)
                     wait.until(EC.presence_of_element_located(selector))
-                    logger("Found element in iframe.")
+                    logger(f"Found element in iframe.")
                     return True
                 except:
                     driver.switch_to.default_content()
@@ -226,7 +201,7 @@ def speech_submission(driver, wait, activity_url, api_key, audio_device, is_vb_a
         driver.execute_script("arguments[0].click();", record_button)
         logger("Clicked 'Record' button.")
         try:
-            wait.until(EC.alert_is_present())
+            wait.until(EC.alert_is_present(), 3)
             Alert(driver).accept()
             logger("Accepted microphone alert.")
         except:
@@ -235,7 +210,8 @@ def speech_submission(driver, wait, activity_url, api_key, audio_device, is_vb_a
         start_time = time.time()
         engine.say(speech_text)
         engine.runAndWait()
-        logger(f"Finished speaking in {time.time() - start_time:.2f} seconds.")
+        elapsed_time = time.time() - start_time
+        logger(f"Finished speaking in {elapsed_time:.2f} seconds.")
         driver.switch_to.default_content()
         stop_button_selector = (By.CLASS_NAME, "poodll_mediarecorder_minimal_stop_button")
         if switch_to_iframe(stop_button_selector):
@@ -298,10 +274,8 @@ def speech_submission(driver, wait, activity_url, api_key, audio_device, is_vb_a
         if engine:
             engine.stop()
 
-def read_aloud(driver, wait, activity_url, audio_device, is_vb_audio, logger):
-    engine = test_audio_routing(audio_device, is_vb_audio, logger)
-    engine.setProperty('rate', 200)
-    engine.setProperty('volume', 0.9)
+def read_aloud(driver, wait, activity_url, logger):
+    engine = initialize_tts(logger)
     try:
         if not navigate_with_retry(driver, wait, activity_url, logger=logger):
             raise Exception("Failed to load read-aloud page.")
@@ -311,38 +285,65 @@ def read_aloud(driver, wait, activity_url, audio_device, is_vb_audio, logger):
                 break
             except:
                 if attempt < 2:
-                    logger("Retrying page load...", "warning")
+                    logger("Retrying page load due to missing element...", "warning")
                     driver.refresh()
                 else:
                     raise Exception("Failed to load page after retries.")
         read_button = wait.until(EC.element_to_be_clickable((By.ID, "mod_readaloud_button_startnoshadow")))
-        driver.execute_script("arguments[0].click();", read_button)
-        logger("Clicked 'Read' button.")
+        driver.execute_script("arguments[0].scrollIntoView(true);", read_button)
+        try:
+            read_button.click()
+            logger("Clicked 'Read' button with Selenium.")
+        except:
+            driver.execute_script("arguments[0].click();", read_button)
+            logger("Clicked 'Read' button with JavaScript.")
         def switch_to_iframe(selector):
-            for iframe in driver.find_elements(By.TAG_NAME, "iframe"):
+            iframes = driver.find_elements(By.TAG_NAME, "iframe")
+            if not iframes:
+                logger("No iframes found.")
+                return False
+            for i, iframe in enumerate(iframes):
                 try:
                     driver.switch_to.frame(iframe)
                     wait.until(EC.presence_of_element_located(selector))
-                    logger("Found element in iframe.")
+                    logger(f"Switched to iframe {i}.")
                     return True
                 except:
+                    logger(f"Record button not found in iframe {i}, switching back.")
                     driver.switch_to.default_content()
-            logger("No iframe with element found.")
             return False
         record_button_selector = (By.CSS_SELECTOR, "button.poodll_start-recording_readaloud[aria-label='Record']")
-        if switch_to_iframe(record_button_selector):
-            logger("Found record button in iframe.")
-        else:
-            driver.switch_to.default_content()
-        record_button = wait.until(EC.element_to_be_clickable(record_button_selector))
-        driver.execute_script("arguments[0].click();", record_button)
-        logger("Clicked 'Record' button.")
+        record_success = False
+        for attempt in range(3):
+            try:
+                if switch_to_iframe(record_button_selector):
+                    logger("Found record button in iframe.")
+                else:
+                    driver.switch_to.default_content()
+                    logger("Searching for record button in main content.")
+                record_button = wait.until(EC.element_to_be_clickable(record_button_selector))
+                driver.execute_script("arguments[0].scrollIntoView(true);", record_button)
+                try:
+                    record_button.click()
+                    logger("Clicked 'Record' button with Selenium.")
+                except:
+                    driver.execute_script("arguments[0].click();", record_button)
+                    logger("Clicked 'Record' button with JavaScript.")
+                time.sleep(1)  # Wait for PoodLL initialization
+                record_success = True
+                break
+            except Exception as e:
+                logger(f"Record attempt {attempt + 1} failed: {e}", "warning")
+                driver.switch_to.default_content()
+                time.sleep(2)
+        if not record_success:
+            raise Exception("Failed to click 'Record' button after retries.")
         try:
-            wait.until(EC.alert_is_present())
+            wait.until(EC.alert_is_present(), 3)
             Alert(driver).accept()
-            logger("Accepted microphone alert.")
+            logger("Accepted JavaScript microphone alert.")
         except:
-            logger("No microphone alert found.")
+            logger("No JavaScript alert found, continuing...")
         driver.switch_to.default_content()
         passage_elements = driver.find_elements(By.CLASS_NAME, "mod_readaloud_grading_passageword")
         passage_text = " ".join([elem.text for elem in passage_elements])
@@ -351,10 +352,16 @@ def read_aloud(driver, wait, activity_url, audio_device, is_vb_audio, logger):
         start_time = time.time()
         engine.say(passage_text)
         engine.runAndWait()
-        logger(f"Finished speaking in {time.time() - start_time:.2f} seconds.")
+        elapsed_time = time.time() - start_time
+        logger(f"Finished speaking in {elapsed_time:.2f} seconds.")
         stop_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.poodll_stop-recording_readaloud[aria-label='Stop']")))
-        driver.execute_script("arguments[0].removeAttribute('disabled'); arguments[0].click();", stop_button)
-        logger("Clicked 'Stop' button.")
+        driver.execute_script("arguments[0].removeAttribute('disabled'); arguments[0].scrollIntoView(true);", stop_button)
+        try:
+            stop_button.click()
+            logger("Clicked 'Stop' button with Selenium.")
+        except:
+            driver.execute_script("arguments[0].click();", stop_button)
+            logger("Clicked 'Stop' button with JavaScript.")
         return True
     except Exception as e:
         logger(f"Read-Aloud error: {e}", "error")
@@ -377,7 +384,7 @@ def quiz_automation(driver, wait, quiz_data, api_key, logger, stop_event):
         score, attempts = process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_event)
         results[quiz_url] = {"score": score, "attempts": attempts}
         logger(f"Completed quiz: {quiz_url}. Score: {score}, Attempts: {attempts}")
-        time.sleep(1)
+        time.sleep(2)
     return results
 
 def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_event):
@@ -392,23 +399,32 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
         logger(f"--- Attempt {attempts_made}/{max_attempts} for quiz: {quiz_url} ---")
         try:
             if not navigate_with_retry(driver, wait, quiz_url, logger=logger):
-                logger("Failed to load quiz page.", "error")
+                logger("Failed to load quiz page after retries.", "error")
                 break
             try:
                 wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
-                logger("Quiz already in progress.")
+                logger("Quiz already in progress, proceeding to questions.")
             except:
-                quiz_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Attempt quiz') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')] | //input[contains(@value,'Attempt quiz') or contains(@value,'Re-attempt quiz') or contains(@value,'Continue your attempt')]")))
-                driver.execute_script("arguments[0].click();", quiz_button)
-                logger("Clicked quiz start/continue button.")
+                quiz_button_xpath = (
+                    "//button[contains(text(),'Attempt quiz') or contains(text(),'Re-attempt quiz') or contains(text(),'Continue your attempt')] | "
+                    "//input[contains(@value,'Attempt quiz') or contains(@value,'Re-attempt quiz') or contains(@value,'Continue your attempt')]"
+                )
                 try:
-                    start_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt')] | //input[contains(@value,'Start attempt')]")))
-                    driver.execute_script("arguments[0].click();", start_button)
-                    logger("Clicked 'Start attempt' button.")
+                    quiz_button = wait.until(EC.element_to_be_clickable((By.XPATH, quiz_button_xpath)))
+                    driver.execute_script("arguments[0].click();", quiz_button)
+                    logger("Clicked quiz start/continue button.")
+                    try:
+                        start_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Start attempt')] | //input[contains(@value,'Start attempt')]")))
+                        driver.execute_script("arguments[0].click();", start_button)
+                        logger("Clicked 'Start attempt' button.")
+                    except:
+                        logger("No 'Start attempt' button found, checking for question text.", "warning")
+                    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
+                    logger("Quiz started successfully.")
                 except:
-                    logger("No 'Start attempt' button found.", "warning")
-                wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
-                logger("Quiz started successfully.")
+                    logger("Quiz start/continue button not found.", "error")
+                    driver.save_screenshot(f"quiz_start_attempt_{attempts_made}.png")
+                    break
             question_count = 0
             while True:
                 if stop_event.is_set():
@@ -437,16 +453,26 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
                                 option_texts.append(label_text)
                                 try:
                                     radio_elements.append(driver.find_element(By.ID, option_id))
-                                except:
+                                except NoSuchElementException as e:
+                                    logger(f"Could not find radio element for ID '{option_id}': {e}", "warning")
                                     option_texts.pop()
                     if not option_texts or len(option_texts) != len(radio_elements):
-                        logger("Failed to parse options correctly.", "warning")
+                        logger(f"Failed to parse options correctly for Q{question_count}.", "warning")
+                        driver.save_screenshot(f"question_{question_count}_parsing_error.png")
                         break
-                    answer_letter = ask_gemini(question_element.text.strip(), option_texts, api_key, logger)
+                    question_text = question_element.text.strip()
+                    answer_letter = ask_gemini(question_text, option_texts, api_key, logger)
                     logger(f"Gemini chose: '{answer_letter}' for Q{question_count}.")
                     if answer_letter and answer_letter in 'abcd'[:len(option_texts)]:
-                        radio_elements[ord(answer_letter) - ord('a')].click()
-                        logger(f"Clicked option {answer_letter}.")
+                        try:
+                            answer_index = ord(answer_letter) - ord('a')
+                            target_element = radio_elements[answer_index]
+                            wait.until(EC.element_to_be_clickable(target_element))
+                            driver.execute_script("arguments[0].click();", target_element)
+                            logger(f"Clicked option {answer_letter} for Q{question_count}.")
+                        except Exception as e:
+                            logger(f"Error clicking option {answer_letter} for Q{question_count}: {e}", "error")
+                            driver.save_screenshot(f"question_{question_count}_click_error.png")
                     else:
                         logger(f"No valid answer selected for Q{question_count}.", "warning")
                     try:
@@ -457,15 +483,19 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
                             EC.presence_of_element_located((By.CLASS_NAME, "qtext")),
                             EC.presence_of_element_located((By.XPATH, "//input[@value='Finish attempt ...']"))
                         ))
-                    except:
+                    except TimeoutException:
                         logger("No 'Next page' button found. Assuming last question.", "info")
+                        break
+                    except Exception as e:
+                        logger(f"Error navigating to next page for Q{question_count}: {e}", "error")
+                        driver.save_screenshot(f"question_{question_count}_navigation_error.png")
                         break
                 except TimeoutException:
                     logger("No more questions found.", "info")
                     break
                 except Exception as e:
-                    logger(f"Question processing error: {e}", "error")
-                    driver.save_screenshot(f"question_{question_count}_error.png")
+                    logger(f"Error processing question {question_count}: {e}", "error")
+                    driver.save_screenshot(f"question_{question_count}_processing_error.png")
                     break
             if stop_event.is_set():
                 break
@@ -483,21 +513,32 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
                 driver.execute_script("arguments[0].click();", finish_review_btn)
                 logger("Clicked 'Finish review'.")
                 wait.until(EC.presence_of_element_located((By.CLASS_NAME, "quizattemptsummary")))
+                time.sleep(1)  # Allow table to render
                 last_row = wait.until(EC.presence_of_element_located((By.XPATH, "//table[contains(@class, 'quizattemptsummary')]/tbody/tr[last()]/td[contains(@class, 'c2')]")))
                 score_text = last_row.text.strip()
+                logger(f"Raw score text: '{score_text}'.")
                 match = re.search(r'(\d+\.?\d*)', score_text)
-                final_score = float(match.group(1)) if match else 0.0
-                logger(f"Attempt {attempts_made} score: {final_score}")
+                if match:
+                    final_score = float(match.group(1))
+                    logger(f"Parsed score: {final_score}")
+                else:
+                    logger(f"Could not parse score from '{score_text}'.", "warning")
+                    final_score = 0.0
                 if target_score is None or final_score >= target_score:
+                    logger(f"Attempt {attempts_made} score: {final_score}. Target {target_score if target_score else 'N/A'} achieved.")
                     break
-                logger(f"Target score {target_score} not met. Retrying...", "warning")
+                logger(f"Attempt {attempts_made} score: {final_score}. Target {target_score} not met. Retrying...", "warning")
             except Exception as e:
-                logger(f"Submission error: {e}", "error")
-                driver.save_screenshot("quiz_submission_error.png")
+                logger(f"Quiz submission error: {e}", "error")
+                driver.save_screenshot(f"quiz_submission_attempt_{attempts_made}.png")
+                with open(f"quiz_submission_page_source_attempt_{attempts_made}.html", "w", encoding="utf-8") as f:
+                    f.write(driver.page_source)
                 break
         except Exception as e:
-            logger(f"Quiz attempt error: {e}", "error")
+            logger(f"Quiz attempt {attempts_made} failed: {e}", "error")
             driver.save_screenshot(f"quiz_attempt_{attempts_made}_error.png")
+            with open(f"quiz_page_source_attempt_{attempts_made}.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
             break
     return final_score, attempts_made
 
@@ -521,7 +562,7 @@ def process_log_queue():
                 st.warning(message)
             else:
                 st.write(message)
-    st._rerun()
+    st.experimental_rerun()
 
 with st.sidebar:
     with st.form("config_form"):
@@ -553,7 +594,7 @@ with st.sidebar:
 
 if submit_button:
     if not (username and password and gemini_api_key):
-        st.error("Please fill in all required fields.")
+        st.error("Please fill in all required fields (username, password, Gemini API key).")
     elif activity_type == "Quiz Automation" and not st.session_state.quizzes:
         st.error("Please add at least one quiz URL.")
     elif activity_type != "Quiz Automation" and not activity_url:
@@ -562,20 +603,18 @@ if submit_button:
         stop_event = threading.Event()
         driver, wait = setup_selenium(headless, logger)
         if not driver:
-            st.error("Failed to initialize WebDriver.")
+            st.error("Failed to initialize WebDriver. Check logs.")
         else:
             try:
                 if not login(driver, wait, username, password, LOGIN_SITE_OPTIONS[lms_site], logger):
-                    st.error("Login failed. Check credentials.")
+                    st.error("Login failed. Check credentials or network.")
                 else:
                     if activity_type == "Speech Submission":
-                        audio_device, is_vb_audio = check_audio_devices(logger)
-                        success = speech_submission(driver, wait, activity_url, gemini_api_key, audio_device, is_vb_audio, logger)
-                        st.success("Speech Submission completed successfully." if success else "Speech Submission failed.")
+                        success = speech_submission(driver, wait, activity_url, gemini_api_key, logger)
+                        st.success("Speech Submission completed successfully." if success else "Speech Submission failed. Check logs.")
                     elif activity_type == "Read-Aloud":
-                        audio_device, is_vb_audio = check_audio_devices(logger)
-                        success = read_aloud(driver, wait, activity_url, audio_device, is_vb_audio, logger)
-                        st.success("Read-Aloud completed successfully." if success else "Read-Aloud failed.")
+                        success = read_aloud(driver, wait, activity_url, logger)
+                        st.success("Read-Aloud completed successfully." if success else "Read-Aloud failed. Check logs.")
                     else:
                         results = quiz_automation(driver, wait, st.session_state.quizzes, gemini_api_key, logger, stop_event)
                         summary = "Quiz Results:\n\n"
@@ -587,10 +626,11 @@ if submit_button:
                         st.write(summary)
             except Exception as e:
                 logger(f"Automation error: {e}", "error")
+                st.error("Automation failed. Check logs for details.")
             finally:
                 try:
                     driver.quit()
+                    logger("Browser closed.")
                 except:
-                    pass
-                logger("Browser closed.")
+                    logger("Browser already closed or error during cleanup.", "warning")
         process_log_queue()
