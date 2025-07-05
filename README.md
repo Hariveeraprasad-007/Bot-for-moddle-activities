@@ -1,6 +1,6 @@
 
 🤖 Bot for Moodle Activities (Saveetha LMS Automation)
-This project is a smart automation bot built using Python, Selenium, and Google Gemini AI. It automates various routine activities on Saveetha Moodle LMS (https://lms2.ai.saveetha.in) such as quizzes, SOLO speaking tasks, and read-aloud exercises.
+This project is a smart automation bot built using Python, Selenium, and Google Gemini AI. It automates various routine activities on Saveetha Moodle LMS  such as quizzes, SOLO speaking tasks, and read-aloud exercises.
 
 Instead of manually doing repetitive LMS work, the bot does everything for you — faster, smarter, and with the help of AI.
 
