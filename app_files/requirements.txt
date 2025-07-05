@@ -1,9 +1,1 @@
-streamlit==1.38.0 
-selenium==4.25.0 
-webdriver-manager==4.0.2 
-google-generativeai==0.8.3 
-pyttsx3==2.98 
-requests==2.32.3 
-beautifulsoup4==4.12.3 
-fuzzywuzzy==0.18.0 
-python-Levenshtein==0.25.1
+pip>=24.2 streamlit==1.38.0 selenium==4.25.0 webdriver-manager==4.0.2 google-generativeai==0.8.3 pyttsx3==2.98 requests==2.32.3 beautifulsoup4==4.12.3 fuzzywuzzy==0.18.0 python-Levenshtein==0.25.1
