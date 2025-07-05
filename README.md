@@ -1,4 +1,4 @@
-# Bot-for-moddle-activities
+# Bot-for-moodle-activities
 
 ```bash
 !pip install selenium webdriver_manager transformers fuzzywuzzy beautifulsoup4
