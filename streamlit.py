@@ -386,13 +386,14 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
     max_attempts = 5
     while attempts_made < max_attempts:
         if stop_event.is_set():
+            logger("Automation stopped during quiz.", "warning")
             break
         attempts_made += 1
         logger(f"--- Attempt {attempts_made}/{max_attempts} for quiz: {quiz_url} ---")
-        if not navigate_with_retry(driver, wait, quiz_url, logger=logger):
-            logger("Failed to load quiz page.", "error")
-            break
         try:
+            if not navigate_with_retry(driver, wait, quiz_url, logger=logger):
+                logger("Failed to load quiz page.", "error")
+                break
             try:
                 wait.until(EC.presence_of_element_located((By.CLASS_NAME, "qtext")))
                 logger("Quiz already in progress.")
@@ -411,6 +412,7 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
             question_count = 0
             while True:
                 if stop_event.is_set():
+                    logger("Stopped during question processing.", "warning")
                     break
                 try:
                     question_element = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "qtext")))
@@ -458,8 +460,12 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
                     except:
                         logger("No 'Next page' button found. Assuming last question.", "info")
                         break
-                except:
+                except TimeoutException:
                     logger("No more questions found.", "info")
+                    break
+                except Exception as e:
+                    logger(f"Question processing error: {e}", "error")
+                    driver.save_screenshot(f"question_{question_count}_error.png")
                     break
             if stop_event.is_set():
                 break
@@ -489,6 +495,10 @@ def process_quiz(driver, wait, quiz_url, target_score, api_key, logger, stop_eve
                 logger(f"Submission error: {e}", "error")
                 driver.save_screenshot("quiz_submission_error.png")
                 break
+        except Exception as e:
+            logger(f"Quiz attempt error: {e}", "error")
+            driver.save_screenshot(f"quiz_attempt_{attempts_made}_error.png")
+            break
     return final_score, attempts_made
 
 # --- Streamlit App ---
